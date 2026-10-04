@@ -1,0 +1,89 @@
+{
+  "schema_version": "1",
+  "artifact_type": "derivation",
+  "derivation_id": "equivariance",
+  "framework_id": "general_relativity",
+  "name": "Equivariance Reference Fixture",
+  "entry_points": {
+    "primary": "equivariance.Build",
+    "secondary": "equivariance.Verify"
+  },
+  "regime": "schematic two-parameter actions with a one-parameter map, closed under the seven Phase-1 rules",
+  "coordinates": [
+    "g",
+    "x"
+  ],
+  "conventions": {
+    "metric_signature": "-+++",
+    "curvature_convention": "MTW",
+    "cosmological_constant": "0"
+  },
+  "premises": [
+    {
+      "id": "action_definitions",
+      "statement": "Two-parameter schematic actions rho_X(g,v) = g*v and rho_Y(g,v) = g*v as Function artifacts."
+    },
+    {
+      "id": "map_definition",
+      "statement": "One-parameter schematic map f(v) = 2*v as a Function artifact."
+    },
+    {
+      "id": "staged_calls",
+      "statement": "Pre-constructed staged outer Calls LHS_1 = f(g*x) and RHS_1 = rho_Y(g, 2*x) with byte-linkage to derivation outputs, because EXPR-APPLY-001 is root-Call-only."
+    }
+  ],
+  "assumptions": [
+    "equivariance_domain"
+  ],
+  "expected_result": {
+    "LHS": "6b7526f1c90be7958d86bb346abb378d698c2c7d97f9ce147d4c1b2b87658be9",
+    "RHS": "6b7526f1c90be7958d86bb346abb378d698c2c7d97f9ce147d4c1b2b87658be9",
+    "description": "Both derivation sides close to 2*g*x with identical canonical bytes; the theorem relation embeds those bytes."
+  },
+  "verification": {
+    "primary_derivation_trace": "Derivation",
+    "primary_stages": 6,
+    "secondary_verification": "independent replay plus theorem-conclusion gate"
+  },
+  "limitations": [
+    {
+      "id": "schematic_only",
+      "description": "g and x are schematic ParameterID-bound symbols, not a general quantified-variable system."
+    },
+    {
+      "id": "minimal_realization",
+      "description": "Concrete functions f(v)=2v and rho(g,v)=g*v chosen to close under the seven rules without distributivity."
+    },
+    {
+      "id": "no_group_sort",
+      "description": "No Group, GroupAction, or Domain sort exists; G/X/Y are fixture labels."
+    },
+    {
+      "id": "canonical_coincidence",
+      "description": "rho_X and rho_Y are canonically identical artifacts; distinction lives in interpretation."
+    },
+    {
+      "id": "single_framework",
+      "description": "Cross-framework disagreement is demonstrated by the separate fixture2 conformance package."
+    },
+    {
+      "id": "no_numerics",
+      "description": "Representation and replay only; no numerical execution."
+    }
+  ],
+  "anomalies": [],
+  "falsification_conditions": [
+    {
+      "id": "final_bytes_differ",
+      "description": "Derivation fails if Step 2 and Step 5 canonical bytes differ."
+    },
+    {
+      "id": "linkage_mismatch",
+      "description": "Fixture construction fails if a staged Call argument does not match its source step output."
+    },
+    {
+      "id": "conclusion_mismatch",
+      "description": "Theorem construction fails if the relation does not embed the designated final bytes."
+    }
+  ]
+}
