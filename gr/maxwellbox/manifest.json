@@ -1,0 +1,45 @@
+{
+  "schema_version": "1",
+  "artifact_type": "derivation",
+  "derivation_id": "maxwellbox_k1",
+  "framework_id": "general_relativity",
+  "name": "Maxwell-Box K1 Trace Attempt (rev2 fixture)",
+  "entry_points": {
+    "primary": "maxwellbox.Build",
+    "secondary": "maxwellbox.Verify"
+  },
+  "source": {
+    "arxiv_id": "2101.11923",
+    "pdf_sha256_hex": "4cd872322ef0358a50c10a70281e76adcfaf66826b1707f757a8f883a563c598",
+    "representation": "phys-trace rev2 (000f6ead…5280): K1/D1 + K2/D2",
+    "scope_note": "D1 s1-s4 represented, s5-s6 replayed; K2 scalar deferred to a later stress test"
+  },
+  "regime": "accelerating-box Maxwell derivation: symmetric-bilinear metric, hypersurface integral, schematic contracted tensor, endpoint gamma algebra",
+  "conventions": {
+    "metric_signature": "-+++",
+    "curvature_convention": "MTW",
+    "cosmological_constant": "0"
+  },
+  "premises": [
+    {"id": "minkowski_bilinear", "statement": "diag(-1,1,1,1) as symmetric_bilinear/1, self-inverse asserted, symmetry checked."},
+    {"id": "energy_integral", "statement": "integral/1 over hypersurface domain/1 with tensor integrand; represented, never executed."},
+    {"id": "contraction_certificate", "statement": "Validated co/contra slot pairing on a schematic rank-2 tensor; structural certificate, no evaluation."},
+    {"id": "endpoint_fragments", "statement": "EboxV=gamma*Ebox0 and Ebox0=m*c^2 closed under EXPR-CANON-001 with theorem-conclusion gates."}
+  ],
+  "assumptions": [
+    "stationarity_zero_momentum",
+    "perfectly_conducting_walls",
+    "rindler_chart"
+  ],
+  "verification": {
+    "primary_derivation_trace": "two replayed single-step CANON derivations",
+    "primary_stages": 2,
+    "secondary_verification": "theorem-conclusion gates plus sketch unsupported-step assertion"
+  },
+  "limitations": [
+    {"id": "partial_execution", "statement": "Sketch steps s1-s4 are UNSUPPORTED by design; execution coverage is PARTIAL. Green tests prove fragment replay plus honest limitation record, never K1 end-to-end."},
+    {"id": "schematic_tensor", "statement": "T^a_b components are display symbols, not the paper's field; contraction pairing is structural, not physical."},
+    {"id": "endpoint_algebra_only", "statement": "Replayed fragments check canonical endpoint algebra; they do not verify the divergence/flux chain that establishes it."},
+    {"id": "scalar_deferred", "statement": "K2/D2 has no fixture in this slice; its mathematics reuses the same families when attempted."}
+  ]
+}
