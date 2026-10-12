@@ -28,28 +28,36 @@ type Fixture struct {
 	FrameworkRef      artifact.ArtifactRef
 	Conventions       map[string]artifact.ArtifactRef
 	Assumptions       map[string]artifact.ArtifactRef
-	MinkowskiRef      artifact.ArtifactRef // symmetric_bilinear/1 diag(-1,1,1,1)
-	DomainRef         artifact.ArtifactRef // domain/1 Sigma_tau
-	IntegralRef       artifact.ArtifactRef // integral/1 box energy
-	TensorRef         artifact.ArtifactRef // tensor/1 schematic T^a_b
-	ContractionRef    artifact.ArtifactRef // contraction/1 certificate
-	TransformDeriv    physmath.Derivation  // replayed s5-class fragment (30)
-	TransformThm      artifact.ArtifactRef // math theorem/1 for (30)
-	TransformPhysThm  artifact.ArtifactRef // phys-gr theorem/1 for (30)
-	MassDeriv         physmath.Derivation  // replayed s6-class fragment (32)
-	MassThm           artifact.ArtifactRef // math theorem/1 for (32)
-	Equation30        artifact.ArtifactRef // phys-gr equation/1
-	Equation32        artifact.ArtifactRef // phys-gr equation/1
-	Sketch            gr.ProtocolSketch    // s1-s6 statuses (s4 SUPPORTED via flux inference)
-	FluxCert          gr.FluxCertificate   // s4 FLUX-CONSERVE-001 result
-	RindlerRef        artifact.ArtifactRef // symmetric_bilinear/1 diag(-xbar^2,1,1,1), s1 schematic
-	MinkowskiDet      artifact.ArtifactRef // expression/1 exactly -1, replayed
-	MinkowskiDetDeriv artifact.ArtifactRef // derivation/1 exact CANON+SIMPLIFY evidence for MinkowskiDet
-	RindlerDet        artifact.ArtifactRef // expression/1 canonical product, replayed
-	RindlerDetDeriv   artifact.ArtifactRef // derivation/1 exact CANON+SIMPLIFY evidence for RindlerDet
-	MinkowskiVol      artifact.ArtifactRef // volume_density/1 factor 1, no reduction
-	RindlerVol        artifact.ArtifactRef // volume_density/1 factor |xbar|, unreduced
-	RindlerVolRed     artifact.ArtifactRef // volume_density/1 reduced to xbar under xbar>0
+	MinkowskiRef      artifact.ArtifactRef   // symmetric_bilinear/1 diag(-1,1,1,1)
+	DomainRef         artifact.ArtifactRef   // domain/1 Sigma_tau
+	IntegralRef       artifact.ArtifactRef   // integral/1 box energy
+	TensorRef         artifact.ArtifactRef   // tensor/1 schematic T^a_b
+	ContractionRef    artifact.ArtifactRef   // contraction/1 certificate
+	TransformDeriv    physmath.Derivation    // replayed s5-class fragment (30)
+	TransformThm      artifact.ArtifactRef   // math theorem/1 for (30)
+	TransformPhysThm  artifact.ArtifactRef   // phys-gr theorem/1 for (30)
+	MassDeriv         physmath.Derivation    // replayed s6-class fragment (32)
+	MassThm           artifact.ArtifactRef   // math theorem/1 for (32)
+	Equation30        artifact.ArtifactRef   // phys-gr equation/1
+	Equation32        artifact.ArtifactRef   // phys-gr equation/1
+	Sketch            gr.ProtocolSketch      // s1-s6 statuses (s4 SUPPORTED via flux inference)
+	FluxCert          gr.FluxCertificate     // s4 FLUX-CONSERVE-001 result
+	RindlerRef        artifact.ArtifactRef   // symmetric_bilinear/1 diag(-xbar^2,1,1,1), s1 schematic
+	MinkowskiDet      artifact.ArtifactRef   // expression/1 exactly -1, replayed
+	MinkowskiDetDeriv artifact.ArtifactRef   // derivation/1 exact CANON+SIMPLIFY evidence for MinkowskiDet
+	RindlerDet        artifact.ArtifactRef   // expression/1 canonical product, replayed
+	RindlerDetDeriv   artifact.ArtifactRef   // derivation/1 exact CANON+SIMPLIFY evidence for RindlerDet
+	MinkowskiVol      artifact.ArtifactRef   // volume_density/1 factor 1, no reduction
+	RindlerVol        artifact.ArtifactRef   // volume_density/1 factor |xbar|, unreduced
+	RindlerVolRed     artifact.ArtifactRef   // volume_density/1 reduced to xbar under xbar>0
+	LabSpace          artifact.ArtifactRef   // collection/1 shared index space for T/xi slots
+	HonestTRef        artifact.ArtifactRef   // tensor/1 rank-2 T_ab, distinct display-symbol components
+	XiRef             artifact.ArtifactRef   // tensor/1 rank-1 xi^b lab vector, display-symbol components
+	WRef              artifact.ArtifactRef   // tensor/1 rank-1 w_a = T_ab xi^b, evaluated
+	WEvalRef          artifact.ArtifactRef   // contraction_evaluation/1 certificate for w_a
+	WDerivRef         artifact.ArtifactRef   // derivation/1 flat CANON+SIMPLIFY evidence for w_a
+	JRef              artifact.ArtifactRef   // tensor/1 rank-1 j_a = -w_a, negated fixture-side
+	JDerivRefs        []artifact.ArtifactRef // derivation/1 per-component Neg+CANON evidence for j_a
 	Symbols           map[string]artifact.ArtifactRef
 }
 
@@ -260,6 +268,7 @@ func Build() *Fixture {
 	if err != nil {
 		panic(err)
 	}
+	f.buildContractionEvidence(s)
 
 	// s5-class executable fragment: EboxV = gamma * Ebox0 (paper (30)).
 	mulRef, err := physmath.PutExpression(s, physmath.Mul(
@@ -463,8 +472,8 @@ func Build() *Fixture {
 	f.Sketch = gr.ProtocolSketch{SketchID: "maxwellbox_k1", UnitID: "d1", Steps: []gr.SketchStep{
 		{StepID: "s1", Description: "Rindler setup (4,6,7); metrics/dets/volumes validated, transform schematic",
 			Status: gr.SketchUnsupported, Refs: []artifact.ArtifactRef{f.MinkowskiRef, f.RindlerRef, f.MinkowskiDet, f.RindlerDet, f.MinkowskiVol, f.RindlerVol, f.RindlerVolRed}},
-		{StepID: "s2", Description: "Lab current + energy integral (18-21); hypersurface integral",
-			Status: gr.SketchUnsupported, Refs: []artifact.ArtifactRef{f.IntegralRef, f.DomainRef}},
+		{StepID: "s2", Description: "Lab current + energy integral (18-21); w_a evaluated + j_a negation evidenced, integral unexecutable",
+			Status: gr.SketchUnsupported, Refs: []artifact.ArtifactRef{f.IntegralRef, f.DomainRef, f.WRef, f.WEvalRef, f.JRef}},
 		{StepID: "s3", Description: "Stationarity (23); contracted tensor integral",
 			Status: gr.SketchUnsupported, Refs: []artifact.ArtifactRef{f.ContractionRef, f.Assumptions["stationarity_zero_momentum"]}},
 		{StepID: "s4", Description: "Conserved integral + boundary flux (24-29, A28/A29); FLUX-CONSERVE-001 schema-checked",
