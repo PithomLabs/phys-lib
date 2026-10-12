@@ -64,7 +64,7 @@
     },
     {
       "id": "frw_covariant_fragment",
-      "statement": "Flat FRW spatial h_ij=a²δ_ij in a Cartesian chart: general adjugate inverse (never diagonal shortcut), vanishing Levi-Civita coefficients verified zero, test-covector derivative with Kronecker-delta goldens and covariant_evaluation/1 certificate. Action/direct routes stay distinct; no route claimed verified."
+      "statement": "Flat FRW spatial h_ij=a²δ_ij (covariant-fragment metric, scale identity disjoint from chart coordinates) in a Cartesian chart: general adjugate inverse, vanishing Levi-Civita coefficients verified zero, test-covector derivative with Kronecker-delta goldens, covariant_evaluation/1 certificate and derivation evidence owned and replayed by Fixture.Verify. No side stores. Parameter-identity scoping is enforced at construction (EvaluateCovariantDerivative, LeviCivita reject collisions before minting) and at verification (store-aware checkers revalidate); raw DIFFERENTIATE-001 callers remain outside this guard by design."
     }
   ],
   "assumptions": [
@@ -78,7 +78,7 @@
   ],
   "verification": {
     "primary_derivation_trace": "replayed DIFFERENTIATE/CANON/SIMPLIFY derivations per evidence piece, including the FRW determinant derivation",
-    "secondary_verification": "Fixture.Verify replays every stored derivation (Derivs plus FRWDerivRef) and checks the Q/density construction relation; hand-derived goldens pin operator composition, quotient expansion, volume provenance, and the historical wrong-pressure rejection"
+    "secondary_verification": "Fixture.Verify replays every stored derivation (Derivs plus FRWDerivRef), checks the Q/density construction relation against the stored equation, and validates the fixture-integrated covariant record (resolution, replay, recomputation, tensor structure, Kronecker values); hand-derived goldens pin operator composition, quotient expansion, volume provenance, and the historical wrong-pressure rejection"
   },
   "limitations": [
     {
@@ -99,7 +99,7 @@
     },
     {
       "id": "no_curvature",
-      "statement": "R^(3), R, and covariant derivatives are represented at most; k enters only as an assumption."
+      "statement": "R^(3), R, Riemann/Ricci tensors, and Bianchi identities are unimplemented. Covariant differentiation IS executed, but only for the documented FRW-chart fragment below; that execution does not imply general curvature support."
     },
     {
       "id": "factored_normals",
@@ -111,7 +111,7 @@
     },
     {
       "id": "covariant_scope",
-      "statement": "Covariant evaluation covers the FRW-chart fragment above; general curvature, Bianchi identities, and functional derivatives remain unsupported."
+      "statement": "Covariant evaluation is executed and replay-verified solely for the flat-FRW-chart covector fragment (vanishing connection, Kronecker goldens, covariant_evaluation/1 certificate checked by Fixture.Verify). General connections, curvature, and functional derivatives remain unsupported."
     }
   ],
   "source_mapping": [
@@ -125,7 +125,8 @@
         "Amplitude",
         "WSimpRef",
         "aNonzero",
-        "ampNonzero"
+        "ampNonzero",
+        "KappaFunRef"
       ]
     },
     {
@@ -147,7 +148,8 @@
       "dependencies": [
         "QRef",
         "aNonzero",
-        "ampNonzero"
+        "ampNonzero",
+        "KappaFunRef"
       ]
     },
     {
@@ -177,8 +179,8 @@
       "source_eq": "75",
       "source_quantity": "guidance RHS",
       "meaning": "phase partials",
-      "defining_relation": "∂_φS, ∂_aS",
-      "fixture_ref": "DPhiSRef, DaSRef",
+      "defining_relation": "∂_φS, ∂_aS executed; GuidePhiRef=N/a³·∂S and GuideARef=-κ̄²·N/a·∂S assembled (LHS time evolution not derived)",
+      "fixture_ref": "DPhiSRef, DaSRef, GuidePhiRef, GuideARef",
       "dependencies": [
         "SRef"
       ]
@@ -193,6 +195,32 @@
         "FRWMetricRef",
         "FRWDerivRef",
         "aPos"
+      ]
+    },
+    {
+      "source_eq": "67-cov",
+      "source_quantity": "covariant derivative",
+      "meaning": "chart-bound covariant differentiation of a test covector in the FRW fragment",
+      "defining_relation": "∇_μω_ν with vanishing Γ; Kronecker goldens",
+      "fixture_ref": "FRWCovEvalRef",
+      "dependencies": [
+        "FRWCovMetricRef",
+        "FRWChartRef",
+        "FRWConnRef",
+        "FRWCovFieldRef",
+        "FRWCovDerivRef"
+      ]
+    },
+    {
+      "source_eq": "67-conn",
+      "source_quantity": "Levi-Civita connection",
+      "meaning": "metric-derived connection of the fragment metric",
+      "defining_relation": "Γ from general inverse + partials; coefficients verified zero",
+      "fixture_ref": "FRWConnRef",
+      "dependencies": [
+        "FRWCovMetricRef",
+        "FRWChartRef",
+        "FRWConnDerivRef"
       ]
     }
   ]
