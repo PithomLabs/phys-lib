@@ -30,13 +30,20 @@ type Fixture struct {
 	AdaRef   artifact.ArtifactRef // expression/1 (a∂_a)²R = 4a²
 	Residual artifact.ArtifactRef // expression/1 ĤR residual, k=0 Λ=0
 	// Test phase S(a,φ) = a·φ and guidance RHS pieces (75).
-	SRef     artifact.ArtifactRef
-	DPhiSRef artifact.ArtifactRef // expression/1 ∂_φS = a
-	DaSRef   artifact.ArtifactRef // expression/1 ∂_aS = φ
+	SRef        artifact.ArtifactRef
+	DPhiSRef    artifact.ArtifactRef // expression/1 ∂_φS = a
+	DaSRef      artifact.ArtifactRef // expression/1 ∂_aS = φ
+	GuidePhiRef artifact.ArtifactRef // expression/1 φ̇ RHS = N/a³·∂_φS (constructed)
+	GuideARef   artifact.ArtifactRef // expression/1 ȧ RHS = -κ̄²·N/a·∂_aS (constructed)
 	// Test amplitude A(a) = a²+1 with quantum density/pressure (76-77).
-	Amplitude artifact.ArtifactRef // expression/1 test |ψ|
-	RhoQRef   artifact.ArtifactRef // expression/1 ρQ piece
-	PQRef     artifact.ArtifactRef // expression/1 pQ
+	// Dependency order: Amplitude → W → RhoQRef → QRef → dQ → PQRef.
+	Amplitude   artifact.ArtifactRef // expression/1 test |ψ|
+	WSimpRef    artifact.ArtifactRef // expression/1 simplified factored W
+	RhoQRef     artifact.ArtifactRef // expression/1 ρQ = (76) density
+	QRef        artifact.ArtifactRef // expression/1 Q = a³ρQ quantum potential
+	QRelRef     artifact.ArtifactRef // relation/1 EQ(Q, a³ρQ) defining relation
+	KappaFunRef artifact.ArtifactRef // function/1 declaring the κ̄² parameter
+	PQRef       artifact.ArtifactRef // expression/1 pQ = -1/3a²·∂_aQ
 	// Quantum fluid assembly (78) and comoving velocity.
 	TQ00Ref artifact.ArtifactRef // expression/1 T_Q^00 component
 	U0Ref   artifact.ArtifactRef // expression/1 U^0 = 1/N component
@@ -114,13 +121,21 @@ func Build() *Fixture {
 	f := &Fixture{Store: s, Symbols: map[string]artifact.ArtifactRef{}, Conds: map[string]artifact.ArtifactRef{}}
 	pa := physmath.DeriveParameterID(0)
 	pp := physmath.DeriveParameterID(1)
+	pk := physmath.DeriveParameterID(2)
 	a := physmath.NewBoundSymbol("a", pa)
 	phi := physmath.NewBoundSymbol("phi", pp)
+	// κ̄² is a declared model parameter (own PID, disjoint from pa/pp), so
+	// it differentiates to 0 as an independent quantity and remains
+	// substitutable via EXPR-SUBSTITUTE-001, unlike an ephemeral symbol.
+	kap := physmath.NewBoundSymbol("kappa2", pk)
+	f.KappaFunRef = mintFn(s, []physmath.ParameterID{pa, pp, pk}, kap)
 	for _, n := range []string{"N", "Uphi", "kappa2", "xbar", "T00", "rhoQ", "pQ"} {
 		f.Symbols[n] = sym(s, n)
 	}
 	f.Conds["aNonzero"] = condNEQ(s, a)
-	f.Conds["phiNonzero"] = condNEQ(s, phi)
+	// No phiNonzero condition is minted: post-P1 polynomial differentiation
+	// manufactures no Pow(phi,0) node, so the WDW pieces hold on the full
+	// declared domain including phi = 0.
 	f.Conds["aPos"] = condGTE(s, a)
 	f.Conds["nNonzero"] = condNEQ(s, physmath.NewEphemeralSymbol("N"))
 	rfn := mintFn(s, []physmath.ParameterID{pa, pp},
@@ -148,7 +163,6 @@ func Build() *Fixture {
 	f.Derivs = append(f.Derivs, d1Deriv, d2Deriv, outDeriv)
 	// Residual ĤR with k=0, Λ=0, U opaque: -1/2a³·∂²R + κ̄²/2a³·(a∂_a)²R + a³U.
 	ainv3 := physmath.Pow(a, physmath.MustRational(-3, 1))
-	kap := physmath.NewEphemeralSymbol("kappa2")
 	u := physmath.NewEphemeralSymbol("Uphi")
 	resid := physmath.Add(
 		physmath.Mul(physmath.MustRational(-1, 2), ainv3, mustResolve(s, f.D2PhiRef)),
@@ -173,6 +187,21 @@ func Build() *Fixture {
 	das, dasDeriv := diffReplay(s, f.SRef, sfn, pa, 1, nil)
 	f.DaSRef = das
 	f.Derivs = append(f.Derivs, dphisDeriv, dasDeriv)
+	// Full RHS assembly per paper (75) from the executed partials. The
+	// time-derivative left-hand sides stay represented relations; only the
+	// right-hand sides are constructed here, from replayed partials.
+	neph := physmath.NewEphemeralSymbol("N")
+	f.GuidePhiRef, err = physmath.PutExpression(s, physmath.Mul(neph,
+		physmath.Pow(a, physmath.MustRational(-3, 1)), mustResolve(s, f.DPhiSRef)))
+	if err != nil {
+		panic(err)
+	}
+	f.GuideARef, err = physmath.PutExpression(s, physmath.Mul(
+		physmath.Neg(physmath.MustRational(1, 1)), kap,
+		neph, physmath.Pow(a, physmath.MustRational(-1, 1)), mustResolve(s, f.DaSRef)))
+	if err != nil {
+		panic(err)
+	}
 	// Test amplitude A(a) = a²+1: ρQ/pQ chain (76-77).
 	amp := physmath.Add(physmath.Pow(a, physmath.MustRational(2, 1)), physmath.MustRational(1, 1))
 	ampFn := mintFn(s, []physmath.ParameterID{pa}, amp)
@@ -183,6 +212,7 @@ func Build() *Fixture {
 	f.Amplitude = ampRef
 	conds := []artifact.ArtifactRef{f.Conds["aNonzero"]}
 	ampCond := condNEQ(s, amp)
+	f.Conds["ampNonzero"] = ampCond
 	conds = append(conds, ampCond)
 	// ∂²_φA = 0 (φ-independent); (a∂_a)²A = 4a² by the same composition.
 	ad1, ad1Deriv := diffReplay(s, ampRef, ampFn, pa, 1, nil)
@@ -193,29 +223,50 @@ func Build() *Fixture {
 	ad2, ad2Deriv := diffReplay(s, am1, ampFn, pa, 1, nil)
 	aout, aoutDeriv := diffReplay2(s, ad2, ampFn, pa, a)
 	f.Derivs = append(f.Derivs, ad1Deriv, ad2Deriv, aoutDeriv)
-	// Q = κ̄²/2a⁶ · 4a²/A(a): Mul(κ̄²/2, a^-6, 4a²-expr, A^-1).
-	qexpr := physmath.Mul(
+	// Stage the composed result through SIMPLIFY (replayed): downstream
+	// assemblies consume the simplified factored form, keeping goldens
+	// hand-traceable. Post-P1 no Pow(·,0) node can arise here, so no
+	// conditions are needed for this step.
+	simpW, simpWDeriv := simpReplay(s, aout, nil)
+	f.WSimpRef = simpW
+	f.Derivs = append(f.Derivs, simpWDeriv)
+	// ρQ from paper (76): for φ-independent A the first term vanishes, so
+	// ρQ = κ̄²/2 · a^-6 · W · A^-1 with W = (a∂_a)²A. This record is the
+	// density, not the potential: see QRef below.
+	rhoqExpr := physmath.Mul(
 		physmath.Mul(physmath.MustRational(1, 2), kap),
 		physmath.Pow(a, physmath.MustRational(-6, 1)),
-		mustResolve(s, aout),
+		mustResolve(s, f.WSimpRef),
 		physmath.Pow(mustResolve(s, ampRef), physmath.MustRational(-1, 1)),
 	)
-	qref, err := physmath.PutExpression(s, qexpr)
+	f.RhoQRef, err = physmath.PutExpression(s, rhoqExpr)
+	if err != nil {
+		panic(err)
+	}
+	// Q = a³ρQ as a first-class artifact plus its defining relation.
+	qexpr := physmath.Mul(
+		physmath.Pow(a, physmath.MustRational(3, 1)),
+		mustResolve(s, f.RhoQRef),
+	)
+	f.QRef, err = physmath.PutExpression(s, qexpr)
+	if err != nil {
+		panic(err)
+	}
+	qrel, err := physmath.EncodeRelationBody(physmath.OpEQ, mustResolve(s, f.QRef), qexpr)
+	if err != nil {
+		panic(err)
+	}
+	f.QRelRef, err = s.Put(physmath.FamilyRelation, qrel)
 	if err != nil {
 		panic(err)
 	}
 	// p_Q = -1/3a² · ∂_aQ via extended DIFFERENTIATE (quotient-capable).
-	dq, dqDeriv := diffReplay(s, qref, ampFn, pa, 1, conds)
+	// The derivative acts on Q, never on ρQ directly.
+	dq, dqDeriv := diffReplay(s, f.QRef, ampFn, pa, 1, conds)
 	f.Derivs = append(f.Derivs, dqDeriv)
 	pq := physmath.Mul(physmath.MustRational(-1, 3),
 		physmath.Pow(a, physmath.MustRational(-2, 1)), mustResolve(s, dq))
 	f.PQRef, err = physmath.PutExpression(s, pq)
-	if err != nil {
-		panic(err)
-	}
-	// ρQ = Q/a³: represented alongside (same Q evidence).
-	rhoq := physmath.Mul(physmath.Pow(a, physmath.MustRational(-3, 1)), mustResolve(s, qref))
-	f.RhoQRef, err = physmath.PutExpression(s, rhoq)
 	if err != nil {
 		panic(err)
 	}
@@ -282,22 +333,83 @@ func Build() *Fixture {
 	return f
 }
 
-// Verify replays every stored evidence derivation. It establishes that
-// the recorded computations reproduce from their premises; it does not
-// solve equations, evolve time, or verify the full Wheeler-DeWitt theory.
+// Verify replays every stored evidence derivation and checks the explicit
+// Q/density construction relation. It establishes that the recorded
+// computations reproduce from their premises; it does not solve equations,
+// evolve time, or verify the full Wheeler-DeWitt theory. Representations
+// without derivation evidence (symbols, assumptions, the Q relation shape
+// itself) are checked as constructions, never described as replayed.
 func (f *Fixture) Verify() error {
 	for i, dref := range f.Derivs {
-		_, payload, err := f.Store.Lookup(dref)
-		if err != nil {
-			return fmt.Errorf("evidence derivation %d unresolvable: %w", i, err)
+		if err := replayDerivation(f.Store, i, dref); err != nil {
+			return err
 		}
-		d, err := physmath.DecodeDerivation(payload)
-		if err != nil {
-			return fmt.Errorf("evidence derivation %d undecodable: %w", i, err)
-		}
-		if err := physmath.Replay(f.Store, d, nil); err != nil {
-			return fmt.Errorf("evidence derivation %d does not replay: %w", i, err)
-		}
+	}
+	// The FRW determinant derivation is stored outside Derivs; it is part
+	// of the declared evidence and must replay as well.
+	if err := replayDerivation(f.Store, -1, f.FRWDerivRef); err != nil {
+		return fmt.Errorf("FRW determinant evidence: %w", err)
+	}
+	// Q/density construction check: Q must equal Mul(a³, ρQ) canonically.
+	// This verifies the dependency shape, not a derivation: Q is built by
+	// construction, and its derivative (replayed above via Derivs) acts on Q.
+	if err := checkQRelation(f.Store, f.QRef, f.RhoQRef); err != nil {
+		return err
+	}
+	return nil
+}
+
+func replayDerivation(s physmath.Store, i int, dref artifact.ArtifactRef) error {
+	_, payload, err := s.Lookup(dref)
+	if err != nil {
+		return fmt.Errorf("evidence derivation %d unresolvable: %w", i, err)
+	}
+	d, err := physmath.DecodeDerivation(payload)
+	if err != nil {
+		return fmt.Errorf("evidence derivation %d undecodable: %w", i, err)
+	}
+	if err := physmath.Replay(s, d, nil); err != nil {
+		return fmt.Errorf("evidence derivation %d does not replay: %w", i, err)
+	}
+	return nil
+}
+
+// checkQRelation resolves Q and ρQ and requires Q to equal the canonical
+// Mul(a³, ρQ) construction with the bound scale-factor identity.
+func checkQRelation(s physmath.Store, qref, rhoref artifact.ArtifactRef) error {
+	qf, qpayload, err := s.Lookup(qref)
+	if err != nil {
+		return fmt.Errorf("Q unresolvable: %w", err)
+	}
+	if qf != physmath.FamilyExpression {
+		return fmt.Errorf("Q is not expression/1")
+	}
+	rf, rpayload, err := s.Lookup(rhoref)
+	if err != nil {
+		return fmt.Errorf("density unresolvable: %w", err)
+	}
+	if rf != physmath.FamilyExpression {
+		return fmt.Errorf("density is not expression/1")
+	}
+	q, err := physmath.DecodeExpr(artifact.NewDecoder(qpayload))
+	if err != nil {
+		return fmt.Errorf("Q undecodable: %w", err)
+	}
+	rho, err := physmath.DecodeExpr(artifact.NewDecoder(rpayload))
+	if err != nil {
+		return fmt.Errorf("density undecodable: %w", err)
+	}
+	a := physmath.NewBoundSymbol("a", physmath.DeriveParameterID(0))
+	want, err := physmath.Canonicalize(physmath.Mul(physmath.Pow(a, physmath.MustRational(3, 1)), rho))
+	if err != nil {
+		return fmt.Errorf("Q relation expectation unbuildable: %w", err)
+	}
+	got, err := physmath.Canonicalize(q)
+	if err != nil {
+		return fmt.Errorf("Q uncanonicalizable: %w", err)
+	}
+	if !got.Equal(want) {
+		return fmt.Errorf("Q is not Mul(a³, density) by canonical identity")
 	}
 	return nil
 }
@@ -402,6 +514,31 @@ func diffReplay2(s physmath.Store, dref, fn artifact.ArtifactRef, pid physmath.P
 		Steps: []physmath.DerivationStep{{
 			Ordinal: 0, ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleExprCanon,
 			InputRefs: []artifact.ArtifactRef{mref}, OutputRef: res.OutputRef,
+		}},
+		ResultRefs: []artifact.ArtifactRef{res.OutputRef},
+	}
+	if err := physmath.Replay(s, d, nil); err != nil {
+		panic(err)
+	}
+	return res.OutputRef, mustMintDerivation(s, d)
+}
+
+// simpReplay runs SIMPLIFY-001 with replay evidence, returning the output
+// ref plus a minted derivation/1 ref for protocol verification.
+func simpReplay(s physmath.Store, in artifact.ArtifactRef, conds []artifact.ArtifactRef) (artifact.ArtifactRef, artifact.ArtifactRef) {
+	res, err := physmath.Apply(s, physmath.Invocation{
+		ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleExprSimplify,
+		InputRefs: []artifact.ArtifactRef{in}, ConditionRefs: conds,
+	})
+	if err != nil {
+		panic(err)
+	}
+	d := physmath.Derivation{
+		PremiseRefs: []artifact.ArtifactRef{in},
+		Steps: []physmath.DerivationStep{{
+			Ordinal: 0, ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleExprSimplify,
+			InputRefs: []artifact.ArtifactRef{in}, OutputRef: res.OutputRef,
+			ConditionRefs: res.ConditionRefs,
 		}},
 		ResultRefs: []artifact.ArtifactRef{res.OutputRef},
 	}

@@ -18,17 +18,50 @@
   "conventions": {
     "metric_signature": "+---",
     "operator_ordering": "Laplace-Beltrami",
-    "kappa_bar_squared": "opaque symbol (4πG/3 asserted, not derived)",
+    "kappa_bar_squared": "declared bound parameter (differentiates to 0 as independent quantity; 4πG/3 value asserted, not derived)",
     "potential_U": "opaque symbol (no internal definition represented)"
   },
   "premises": [
-    {"id": "test_wavefunction_R", "statement": "R(a,φ) = a²+φ²+1 as expression/1 over declared (a,φ); test input only, not a WDW solution."},
-    {"id": "test_phase_S", "statement": "S(a,φ) = a·φ as expression/1; RHS partials executed, LHS time evolution not derived."},
-    {"id": "test_amplitude_A", "statement": "A(a) = a²+1 as expression/1; amplitude/phase split stipulated, not decomposed."},
-    {"id": "wdw_operator_pieces", "statement": "∂²_φ and (a∂_a)² applied via DIFFERENTIATE-001 with replayed derivations; (a∂_a)² by composition a·∂_a(a·∂_a·)."},
-    {"id": "quantum_density_pressure", "statement": "ρQ/pQ assembled from replayed partials with NEQ(a,0) and NEQ(A,0) conditions; quotient via negative-power rule."},
-    {"id": "tq_assembly", "statement": "T_Q^00 from ρQ, pQ, comoving U^0 (Kronecker selector over inverse lapse), g^00; construction only."},
-    {"id": "frw_volume", "statement": "diag(a²,a²,a²) determinant via replayed CANON+SIMPLIFY; a³ factor gated on cited a>0; product form preserved (not a^6)."}
+    {
+      "id": "test_wavefunction_R",
+      "statement": "R(a,φ) = a²+φ²+1 as expression/1 over declared (a,φ); test input only, not a WDW solution. Second φ-derivative needs no nonzero condition (first-power rule)."
+    },
+    {
+      "id": "test_phase_S",
+      "statement": "S(a,φ) = a·φ as expression/1; RHS partials executed, LHS time evolution not derived."
+    },
+    {
+      "id": "test_amplitude_A",
+      "statement": "A(a) = a²+1 as expression/1; amplitude/phase split stipulated, never decomposed from an arbitrary psi."
+    },
+    {
+      "id": "wdw_operator_pieces",
+      "statement": "∂²_φ and (a∂_a)² applied via DIFFERENTIATE-001 with replayed derivations; (a∂_a)² by composition a·∂_a(a·∂_a·), factored form pinned with anti-golden vs a²∂²_a."
+    },
+    {
+      "id": "quantum_density",
+      "statement": "ρQ from paper (76) for the test amplitude: kappa²/2·a^-6·W·A^-1 with replayed partials; NEQ(a,0) and NEQ(A,0) conditions preserved."
+    },
+    {
+      "id": "quantum_potential",
+      "statement": "Q = a³ρQ as a first-class expression/1 artifact with EQ(Q, a³ρQ) relation; dependency checked by Verify, not merely commented."
+    },
+    {
+      "id": "quantum_pressure",
+      "statement": "pQ = -1/3a²·∂_aQ from differentiating Q (never ρQ); quotient via negative-power rule; hand-traced factored golden plus historical wrong-path anti-golden."
+    },
+    {
+      "id": "tq_assembly",
+      "statement": "T_Q^00 from ρQ, pQ, comoving U^0 (Kronecker selector over inverse lapse), g^00; construction only."
+    },
+    {
+      "id": "frw_volume",
+      "statement": "diag(a²,a²,a²) determinant via replayed CANON+SIMPLIFY with bound-variable anti-golden; a³ factor gated on cited a>0; product form preserved (not a^6)."
+    },
+    {
+      "id": "reduced_variation",
+      "statement": "Bounded ansatz-derived projection S = Σ2a·γ·V with replayed CANON+SIMPLIFY evidence; spatial integration and fiducial volume stay represented-only."
+    }
   ],
   "assumptions": [
     "a_nonzero",
@@ -40,15 +73,119 @@
     "opaque_potential_U"
   ],
   "verification": {
-    "primary_derivation_trace": "replayed DIFFERENTIATE/CANON/SIMPLIFY derivations per evidence piece",
-    "secondary_verification": "Fixture.Verify replays all stored derivations; hand-derived goldens pin operator composition, quotient expansion, and volume provenance"
+    "primary_derivation_trace": "replayed DIFFERENTIATE/CANON/SIMPLIFY derivations per evidence piece, including the FRW determinant derivation",
+    "secondary_verification": "Fixture.Verify replays every stored derivation (Derivs plus FRWDerivRef) and checks the Q/density construction relation; hand-derived goldens pin operator composition, quotient expansion, volume provenance, and the historical wrong-pressure rejection"
   },
   "limitations": [
-    {"id": "no_equation_solving", "statement": "The WDW residual is computed and recorded, never solved; no ψ satisfying Ĥψ=0 is constructed."},
-    {"id": "no_time_evolution", "statement": "Guidance LHS time derivatives are represented relations; evolution is not derived."},
-    {"id": "no_full_wdw", "statement": "Minisuperspace is the paper's symmetry-reduced toy model, not the full Wheeler-DeWitt theory (functional derivatives unrepresented)."},
-    {"id": "no_functional_variation", "statement": "δ/δh and δ/δφ remain unimplemented pending the reduced-variation layer."},
-    {"id": "no_curvature", "statement": "R^(3), R, and covariant derivatives are represented at most; k enters only as an assumption."},
-    {"id": "factored_normals", "statement": "Simplified forms preserve factored structure (no distributivity or x+x→2x); equalities to collapsed monomials are hand-verified in test comments, not executed."}
+    {
+      "id": "no_equation_solving",
+      "statement": "The WDW residual is computed and recorded, never solved; no ψ satisfying Ĥψ=0 is constructed."
+    },
+    {
+      "id": "no_time_evolution",
+      "statement": "Guidance LHS time derivatives are represented relations; evolution is not derived."
+    },
+    {
+      "id": "no_full_wdw",
+      "statement": "Minisuperspace is the paper's symmetry-reduced toy model, not the full Wheeler-DeWitt theory (general functional derivatives unrepresented)."
+    },
+    {
+      "id": "reduced_variation_bounded",
+      "statement": "Only the bounded ansatz-derived projection (2a·γ·V sums) is implemented; general δ/δh_ij(x), δ/δφ(x) remain unsupported; integration stays represented-only."
+    },
+    {
+      "id": "no_curvature",
+      "statement": "R^(3), R, and covariant derivatives are represented at most; k enters only as an assumption."
+    },
+    {
+      "id": "factored_normals",
+      "statement": "Simplified forms preserve factored structure (no distributivity or x+x→2x); equalities to collapsed monomials are hand-verified in test comments, not executed."
+    },
+    {
+      "id": "no_empirical_claims",
+      "statement": "No observational or experimental consequences are represented or claimed."
+    }
+  ],
+  "source_mapping": [
+    {
+      "source_eq": "76",
+      "source_quantity": "rho_Q",
+      "meaning": "quantum energy density",
+      "defining_relation": "rhoQ = -1/2a^6|psi|·∂²|psi| + κ̄²/2a^6|psi|·(a∂_a)²|psi|",
+      "fixture_ref": "RhoQRef",
+      "dependencies": [
+        "Amplitude",
+        "WSimpRef",
+        "aNonzero",
+        "ampNonzero"
+      ]
+    },
+    {
+      "source_eq": "76-derived",
+      "source_quantity": "Q",
+      "meaning": "quantum potential density",
+      "defining_relation": "Q = a^3·rhoQ",
+      "fixture_ref": "QRef",
+      "dependencies": [
+        "RhoQRef"
+      ]
+    },
+    {
+      "source_eq": "77",
+      "source_quantity": "p_Q",
+      "meaning": "quantum pressure",
+      "defining_relation": "pQ = -1/3a^2·∂_aQ",
+      "fixture_ref": "PQRef",
+      "dependencies": [
+        "QRef",
+        "aNonzero",
+        "ampNonzero"
+      ]
+    },
+    {
+      "source_eq": "78",
+      "source_quantity": "T_Q^00",
+      "meaning": "quantum energy-momentum 00-component, comoving",
+      "defining_relation": "TQ00 = (rhoQ+pQ)·U^0·U^0 - pQ·g^00",
+      "fixture_ref": "TQ00Ref",
+      "dependencies": [
+        "RhoQRef",
+        "PQRef",
+        "U0Ref"
+      ]
+    },
+    {
+      "source_eq": "74",
+      "source_quantity": "WDW operator action",
+      "meaning": "minisuperspace constraint operator applied to test R",
+      "defining_relation": "ĤR residual (k=0, Λ=0)",
+      "fixture_ref": "Residual",
+      "dependencies": [
+        "RRef",
+        "aNonzero"
+      ]
+    },
+    {
+      "source_eq": "75",
+      "source_quantity": "guidance RHS",
+      "meaning": "phase partials",
+      "defining_relation": "∂_φS, ∂_aS",
+      "fixture_ref": "DPhiSRef, DaSRef",
+      "dependencies": [
+        "SRef"
+      ]
+    },
+    {
+      "source_eq": "67",
+      "source_quantity": "FRW spatial volume",
+      "meaning": "determinant and a³-gated factor, flat chart",
+      "defining_relation": "det diag(a²,a²,a²), μ=a³ under a>0",
+      "fixture_ref": "FRWVolRef",
+      "dependencies": [
+        "FRWMetricRef",
+        "FRWDerivRef",
+        "aPos"
+      ]
+    }
   ]
 }
