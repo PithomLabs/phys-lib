@@ -7,78 +7,23 @@ import (
 	"github.com/PithomLabs/phys-math"
 )
 
-// TestFRWCovariantFragment exercises the complete metric → general
-// inverse → Levi-Civita → covariant-derivative path on the flat FRW
-// spatial metric h_ij = a²δ_ij in a Cartesian chart. The scale factor a
-// carries a parameter identity disjoint from the coordinates (spatially
-// constant by the FRW symmetries), so all spatial partials vanish and the
-// connection is honestly zero — asserted, not assumed.
+// TestFRWCovariantFragment exercises the fixture-integrated covariant
+// evidence: Build() constructs the chart, metric, connection, covector,
+// evaluation, and certificate in the fixture store, and Verify() resolves,
+// replays, and structurally checks them. There is no side store: the
+// fixture is the single unambiguous evidence path.
+//
+// The flat chart makes all spatial partials vanish, so the Levi-Civita
+// computation below returns vanishing coefficients. The test asserts those
+// computed zeros against explicit expected values; vanishing is the
+// verified computation result for this chart, not an assumed input.
 func TestFRWCovariantFragment(t *testing.T) {
-	s := physmath.NewMemStore()
-	px := physmath.DeriveParameterID(0)
-	py := physmath.DeriveParameterID(1)
-	pz := physmath.DeriveParameterID(2)
-	pa := physmath.DeriveParameterID(3)
-	x := physmath.NewBoundSymbol("x", px)
-	y := physmath.NewBoundSymbol("y", py)
-	z := physmath.NewBoundSymbol("z", pz)
-	a := physmath.NewBoundSymbol("a", pa)
-	declFn := mintFn(s, []physmath.ParameterID{px, py, pz}, x)
-	// Chart over a fresh space.
-	desig, err := physmath.PutExpression(s, physmath.NewEphemeralSymbol("frw_cartesian_space"))
-	if err != nil {
-		t.Fatal(err)
+	f := Build()
+	if err := f.Verify(); err != nil {
+		t.Fatalf("fixture Verify failed: %v", err)
 	}
-	spaceRaw, err := physmath.Collection{ElementRefs: []artifact.ArtifactRef{desig}}.Encode()
-	if err != nil {
-		t.Fatal(err)
-	}
-	space, err := s.Put(physmath.FamilyCollection, spaceRaw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	coordRef := func(e physmath.Expr) artifact.ArtifactRef {
-		t.Helper()
-		r, err := physmath.PutExpression(s, e)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return r
-	}
-	chart := physmath.CoordinateSystem{Dimension: 3,
-		CoordinateRefs: []artifact.ArtifactRef{coordRef(x), coordRef(y), coordRef(z)},
-		SpaceRef:       space}
-	if err := chart.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	chartRef, err := s.Put(physmath.FamilyCoordinateSystem, chart.Encode())
-	if err != nil {
-		t.Fatal(err)
-	}
-	mapping := physmath.CoordParamMap{Entries: []physmath.BoundParameterRef{
-		{DeclaringArtifactRef: declFn, ParameterID: px},
-		{DeclaringArtifactRef: declFn, ParameterID: py},
-		{DeclaringArtifactRef: declFn, ParameterID: pz},
-	}}
-	// Metric diag(a²,a²,a²) via the symmetric-bilinear form.
-	a2 := physmath.Pow(a, physmath.MustRational(2, 1))
-	mref := diagTensor(s, []physmath.Expr{a2, a2, a2})
-	// General inverse (never a diagonal shortcut): det + NEQ condition.
-	detRef, invComps, _, err := generalInverseForTest(t, s, mref)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = invComps
-	detExpr := resolveTestExpr(t, s, detRef)
-	cond := condNEQ(s, detExpr)
-	// Levi-Civita: flat chart implies vanishing coefficients, verified
-	// below rather than assumed.
-	connRef, connDeriv, err := physmath.LeviCivita(s, mref, chartRef, mapping, declFn,
-		[]artifact.ArtifactRef{cond})
-	if err != nil {
-		t.Fatalf("FRW levi-civita failed: %v", err)
-	}
-	_, cpayload, err := s.Lookup(connRef)
+	// Connection coefficients computed to exactly zero by the fixture.
+	_, cpayload, err := f.Store.Lookup(f.FRWConnRef)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,146 +35,274 @@ func TestFRWCovariantFragment(t *testing.T) {
 		t.Fatal("flat-chart symmetry not established")
 	}
 	for i, r := range conn.CoefficientRefs {
-		if got := resolveTestExpr(t, s, r); !got.Equal(physmath.MustRational(0, 1)) {
+		if got := resolveTestExpr(t, f.Store, r); !got.Equal(physmath.MustRational(0, 1)) {
 			t.Fatalf("FRW coefficient %d is not exactly zero", i)
 		}
 	}
-	if err := physmath.Replay(s, connDeriv, nil); err != nil {
-		t.Fatalf("FRW connection derivation does not replay: %v", err)
+	// Hand golden already enforced inside Verify (Kronecker components);
+	// here assert the record round-trips through the store.
+	fam, payload, err := f.Store.Lookup(f.FRWCovEvalRef)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := physmath.CheckAffineConnection(s, connRef, &physmath.ConnectionSources{
-		MetricRef: mref, Mapping: mapping, DeclaringFnRef: declFn,
-		Conds: []artifact.ArtifactRef{cond},
-	}); err != nil {
-		t.Fatalf("FRW connection check failed: %v", err)
+	if fam != physmath.FamilyCovariantEvaluation {
+		t.Fatal("evaluation record is not covariant_evaluation/1")
 	}
-	// Test covector ω = [x, y, z]: ∇_μ ω_ν = δ_μν by hand (partials only,
-	// connection terms vanish against zero coefficients).
-	mkIdx := func(label string) artifact.ArtifactRef {
-		p, err := physmath.Index{Label: label, Variance: physmath.VarianceCovariant, Space: &space}.Encode()
+	if _, err := physmath.DecodeCovariantEvaluation(payload); err != nil {
+		t.Fatalf("evaluation record does not decode: %v", err)
+	}
+}
+
+// TestFRWCovariantIdentities guards the parameter-identity discipline:
+// the covariant fragment uses its own metric artifact over a disjoint
+// scale-factor identity (same display label "a", different PID), so chart
+// differentiation never confuses the scale factor with a coordinate. The
+// determinant/volume path keeps the original metric.
+func TestFRWCovariantIdentities(t *testing.T) {
+	f := Build()
+	if f.FRWCovMetricRef == f.FRWMetricRef {
+		t.Fatal("covariant fragment reuses the volume-path metric identity")
+	}
+	// Both metrics decode to diagonal form with the same display labels
+	// but different parameter identities: read the (0,0) components.
+	compOf := func(ref artifact.ArtifactRef) physmath.Expr {
+		t.Helper()
+		_, payload, err := f.Store.Lookup(ref)
 		if err != nil {
 			t.Fatal(err)
 		}
-		r, err := s.Put(physmath.FamilyIndex, p)
+		m, err := physmath.DecodeSymmetricBilinear(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, cp, err := f.Store.Lookup(m.ComponentRefs[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		e, err := physmath.DecodeExpr(artifact.NewDecoder(cp))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	covComp := compOf(f.FRWCovMetricRef)
+	volComp := compOf(f.FRWMetricRef)
+	if covComp.Equal(volComp) {
+		t.Fatal("fragment and volume metrics share component identities")
+	}
+	// The fragment scale factor is independent of every chart coordinate:
+	// differentiating its square along x yields exactly zero (spatial
+	// constancy through an independent parameter identity) — which is
+	// what makes the flat-chart connection vanish. A PID collision would
+	// produce 2a here instead.
+	xPid := physmath.DeriveParameterID(0)
+	params := append(physmath.BoundParameterRef{DeclaringArtifactRef: f.FRWDeclFnRef, ParameterID: xPid}.Encode(),
+		artifact.EncodeUInt32(1)...)
+	res, err := physmath.Apply(f.Store, physmath.Invocation{
+		ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleDifferentiate,
+		InputRefs:  []artifact.ArtifactRef{compOfRef(t, f, f.FRWCovMetricRef), f.FRWDeclFnRef},
+		Parameters: params,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The rule output is canonical, not simplified: Mul(2,a,0)-shaped.
+	// Simplification (no conditions needed) annihilates it to bare zero.
+	simp, err := physmath.Apply(f.Store, physmath.Invocation{
+		ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleExprSimplify,
+		InputRefs: []artifact.ArtifactRef{res.OutputRef},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveTestExpr(t, f.Store, simp.OutputRef); !got.Equal(physmath.MustRational(0, 1)) {
+		t.Fatal("fragment scale factor is not independent of chart coordinates")
+	}
+}
+
+func compOfRef(t *testing.T, f *Fixture, ref artifact.ArtifactRef) artifact.ArtifactRef {
+	t.Helper()
+	_, payload, err := f.Store.Lookup(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := physmath.DecodeSymmetricBilinear(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m.ComponentRefs[0]
+}
+
+// TestFRWCovariantNegatives proves each failure boundary with fixture
+// copies whose stores are shared (content-addressed) but whose record
+// under test is mutated.
+func TestFRWCovariantNegatives(t *testing.T) {
+	f := Build()
+	// Chart-mismatched connection: build a second chart and rewire the
+	// record's connection through a same-shape connection on it.
+	otherChart, otherConn := otherChartAndConn(t, f)
+	badRec := mustDecodeEval(t, f, f.FRWCovEvalRef)
+	badRec.ConnectionRef = otherConn
+	raw := badRec.Encode()
+	cref, err := f.Store.Put(physmath.FamilyCovariantEvaluation, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = cref
+	_ = otherChart
+	bad := *f
+	bad.FRWCovEvalRef = cref
+	if err := bad.Verify(); err == nil {
+		t.Fatal("chart-mismatched connection accepted by Verify")
+	}
+	// Swapped result tensor.
+	f2 := Build()
+	alt, err := f2.Store.Put(physmath.FamilyTensor, mustAltTensor(t, f2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	altField, err := f2.Store.Put(physmath.FamilyTensorField,
+		physmath.TensorField{TensorRef: alt, CoordinateSystemRef: f2.FRWChartRef}.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec2 := mustDecodeEval(t, f2, f2.FRWCovEvalRef)
+	rec2.ResultRef = altField
+	raw2 := rec2.Encode()
+	cref2, err := f2.Store.Put(physmath.FamilyCovariantEvaluation, raw2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad2 := *f2
+	bad2.FRWCovEvalRef = cref2
+	if err := bad2.Verify(); err == nil {
+		t.Fatal("substituted result accepted by Verify")
+	}
+	// Corrupted evaluation derivation.
+	f3 := Build()
+	ghost, err := artifact.ComputeRef("physmath", "1", "derivation/1", []byte("ghost-payload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec3 := mustDecodeEval(t, f3, f3.FRWCovEvalRef)
+	rec3.DerivationRef = ghost
+	raw3 := rec3.Encode()
+	cref3, err := f3.Store.Put(physmath.FamilyCovariantEvaluation, raw3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad3 := *f3
+	bad3.FRWCovEvalRef = cref3
+	if err := bad3.Verify(); err == nil {
+		t.Fatal("corrupted derivation accepted by Verify")
+	}
+}
+
+func mustDecodeEval(t *testing.T, f *Fixture, ref artifact.ArtifactRef) physmath.CovariantEvaluation {
+	t.Helper()
+	_, payload, err := f.Store.Lookup(ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := physmath.DecodeCovariantEvaluation(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rec
+}
+
+// otherChartAndConn builds a second chart plus a zero connection over it,
+// reusing the same dimension so only chart identity differs.
+func otherChartAndConn(t *testing.T, f *Fixture) (artifact.ArtifactRef, artifact.ArtifactRef) {
+	t.Helper()
+	desig, err := physmath.PutExpression(f.Store, physmath.NewEphemeralSymbol("other_space"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spaceRaw, err := physmath.Collection{ElementRefs: []artifact.ArtifactRef{desig}}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	space, err := f.Store.Put(physmath.FamilyCollection, spaceRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	px := physmath.DeriveParameterID(7)
+	py := physmath.DeriveParameterID(8)
+	pz := physmath.DeriveParameterID(9)
+	coord := func(name string, pid physmath.ParameterID) artifact.ArtifactRef {
+		r, err := physmath.PutExpression(f.Store, physmath.NewBoundSymbol(name, pid))
 		if err != nil {
 			t.Fatal(err)
 		}
 		return r
 	}
-	omega := mkTensorRef(s, t, []artifact.ArtifactRef{mkIdx("nu")}, []physmath.Expr{x, y, z})
-	omegaField, err := s.Put(physmath.FamilyTensorField,
-		physmath.TensorField{TensorRef: omega, CoordinateSystemRef: chartRef}.Encode())
+	chart := physmath.CoordinateSystem{Dimension: 3,
+		CoordinateRefs: []artifact.ArtifactRef{coord("u", px), coord("v", py), coord("w", pz)},
+		SpaceRef:       space}
+	if err := chart.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	chartRef, err := f.Store.Put(physmath.FamilyCoordinateSystem, chart.Encode())
 	if err != nil {
 		t.Fatal(err)
 	}
-	wres, wderiv, err := physmath.EvaluateCovariantDerivative(s, omegaField, connRef, mapping, declFn, nil)
-	if err != nil {
-		t.Fatalf("FRW covector derivative failed: %v", err)
-	}
-	wfield := decodeTensorField(s, t, wres)
-	if wfield.CoordinateSystemRef != chartRef {
-		t.Fatal("FRW result chart not preserved")
-	}
-	wtensor := decodeTensor(s, t, wfield.TensorRef)
-	if wtensor.Rank != 2 || len(wtensor.ComponentRefs) != 9 {
-		t.Fatal("FRW result shape wrong")
-	}
-	// Hand golden: ∇_μ ω_ν = δ_μν (partials of [x,y,z]; Γ = 0).
-	one := physmath.MustRational(1, 1)
-	zero := physmath.MustRational(0, 1)
-	for i := 0; i < 3; i++ {
-		for j := 0; j < 3; j++ {
-			want := zero
-			if i == j {
-				want = one
-			}
-			if got := resolveTestExpr(t, s, wtensor.ComponentRefs[i*3+j]); !got.Equal(want) {
-				t.Fatalf("FRW component (%d,%d) is not hand-derived Kronecker", i, j)
-			}
-		}
-	}
-	// Certificate binds field, connection, result, derivation.
-	wderivRef, err := s.Put(physmath.FamilyDerivation, mustDerivationBytes(t, wderiv))
+	zero, err := physmath.PutExpression(f.Store, physmath.MustRational(0, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := physmath.CovariantEvaluation{FieldRef: omegaField, ConnectionRef: connRef,
-		ResultRef: wres, DerivationRef: wderivRef}
-	if err := rec.Validate(); err != nil {
+	coeffs := make([]artifact.ArtifactRef, 27)
+	for i := range coeffs {
+		coeffs[i] = zero
+	}
+	conn := physmath.AffineConnection{CoordRef: chartRef, Dimension: 3, CoefficientRefs: coeffs}
+	raw := conn.Encode()
+	connRef, err := f.Store.Put(physmath.FamilyAffineConnection, raw)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := physmath.CheckCovariantEvaluation(s, rec, mapping, declFn); err != nil {
-		t.Fatalf("FRW record rejected: %v", err)
-	}
+	return chartRef, connRef
 }
 
-func mkTensorRef(s physmath.Store, t *testing.T, idx []artifact.ArtifactRef, comps []physmath.Expr) artifact.ArtifactRef {
+// mustAltTensor builds a non-Kronecker rank-2 tensor for substitution tests.
+func mustAltTensor(t *testing.T, f *Fixture) []byte {
 	t.Helper()
-	crefs := make([]artifact.ArtifactRef, len(comps))
-	for i, e := range comps {
-		r, err := physmath.PutExpression(s, e)
-		if err != nil {
-			t.Fatal(err)
-		}
-		crefs[i] = r
+	_, cpayload, err := f.Store.Lookup(f.FRWChartRef)
+	if err != nil {
+		t.Fatal(err)
 	}
-	tn := physmath.Tensor{Rank: 1, Dimension: 3, IndexRefs: idx, ComponentRefs: crefs}
+	chart, err := physmath.DecodeCoordinateSystem(cpayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seven, err := physmath.PutExpression(f.Store, physmath.MustRational(7, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	crefs := make([]artifact.ArtifactRef, 9)
+	for i := range crefs {
+		crefs[i] = seven
+	}
+	tn := physmath.Tensor{Rank: 2, Dimension: 3,
+		IndexRefs:     []artifact.ArtifactRef{mustDerivIdx(t, f, chart), mustDerivIdx(t, f, chart)},
+		ComponentRefs: crefs}
 	if err := tn.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	ref, err := s.Put(physmath.FamilyTensor, tn.Encode())
+	return tn.Encode()
+}
+
+func mustDerivIdx(t *testing.T, f *Fixture, chart physmath.CoordinateSystem) artifact.ArtifactRef {
+	t.Helper()
+	p, err := physmath.Index{Label: "d", Variance: physmath.VarianceCovariant, Space: &chart.SpaceRef}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := f.Store.Put(physmath.FamilyIndex, p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return ref
-}
-
-func decodeTensorField(s physmath.Store, t *testing.T, ref artifact.ArtifactRef) physmath.TensorField {
-	t.Helper()
-	_, payload, err := s.Lookup(ref)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tf, err := physmath.DecodeTensorField(payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return tf
-}
-
-func decodeTensor(s physmath.Store, t *testing.T, ref artifact.ArtifactRef) physmath.Tensor {
-	t.Helper()
-	_, payload, err := s.Lookup(ref)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tn, err := physmath.DecodeTensor(payload)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return tn
-}
-
-func mustDerivationBytes(t *testing.T, d physmath.Derivation) []byte {
-	t.Helper()
-	raw, err := d.Encode()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return raw
-}
-
-// generalInverseForTest runs InverseMatrix with an auto-minted exact
-// NEQ(det,0) condition (an explicitly recorded assumption).
-func generalInverseForTest(t *testing.T, s physmath.Store, mref artifact.ArtifactRef) (artifact.ArtifactRef, []artifact.ArtifactRef, physmath.Derivation, error) {
-	t.Helper()
-	detRef, _, err := physmath.GeneralDeterminant(s, mref)
-	if err != nil {
-		t.Fatal(err)
-	}
-	detExpr := resolveTestExpr(t, s, detRef)
-	cond := condNEQ(s, detExpr)
-	return physmath.InverseMatrix(s, mref, []artifact.ArtifactRef{cond})
 }
 
 func resolveTestExpr(t *testing.T, s physmath.Store, ref artifact.ArtifactRef) physmath.Expr {

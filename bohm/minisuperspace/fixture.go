@@ -37,7 +37,8 @@ type Fixture struct {
 	GuideARef   artifact.ArtifactRef // expression/1 ȧ RHS = -κ̄²·N/a·∂_aS (constructed)
 	// Test amplitude A(a) = a²+1 with quantum density/pressure (76-77).
 	// Dependency order: Amplitude → W → RhoQRef → QRef → dQ → PQRef.
-	Amplitude   artifact.ArtifactRef // expression/1 test |ψ|
+	Amplitude   artifact.ArtifactRef // expression/1 test |psi|
+	AmpFunRef   artifact.ArtifactRef // function/1 declaring the amplitude parameter |ψ|
 	WSimpRef    artifact.ArtifactRef // expression/1 simplified factored W
 	RhoQRef     artifact.ArtifactRef // expression/1 ρQ = (76) density
 	QRef        artifact.ArtifactRef // expression/1 Q = a³ρQ quantum potential
@@ -55,6 +56,21 @@ type Fixture struct {
 	Derivs       []artifact.ArtifactRef
 	Symbols      map[string]artifact.ArtifactRef
 	Conds        map[string]artifact.ArtifactRef
+	// FRW covariant fragment: chart-bound metric connection and covector
+	// derivative evidence, verified by Verify() (no side stores).
+	FRWChartRef     artifact.ArtifactRef   // coordinate_system/1 Cartesian chart
+	FRWCovMetricRef artifact.ArtifactRef   // symmetric_bilinear/1 diag(a3²×3), covariant-fragment scale factor
+	FRWDeclFnRef    artifact.ArtifactRef   // function/1 declaring chart coordinates
+	FRWMapping      physmath.CoordParamMap // ordered coordinate-to-parameter binding
+	FRWConnRef      artifact.ArtifactRef   // affine_connection/1 Levi-Civita of FRWMetricRef
+	FRWConnDerivRef artifact.ArtifactRef   // derivation/1 connection evidence
+	FRWCovFieldRef  artifact.ArtifactRef   // tensor_field/1 test covector
+	FRWCovResultRef artifact.ArtifactRef   // tensor_field/1 covariant-derivative result
+	FRWCovEvalRef   artifact.ArtifactRef   // covariant_evaluation/1 certificate
+	FRWCovDerivRef  artifact.ArtifactRef   // derivation/1 evaluation evidence
+	// Stable shared identities for repeated quantities.
+	NRef    artifact.ArtifactRef // expression/1 lapse N, single identity
+	UPhiRef artifact.ArtifactRef // expression/1 potential U(phi), single identity
 }
 
 func sym(s physmath.Store, name string) artifact.ArtifactRef {
@@ -129,15 +145,18 @@ func Build() *Fixture {
 	// substitutable via EXPR-SUBSTITUTE-001, unlike an ephemeral symbol.
 	kap := physmath.NewBoundSymbol("kappa2", pk)
 	f.KappaFunRef = mintFn(s, []physmath.ParameterID{pa, pp, pk}, kap)
-	for _, n := range []string{"N", "Uphi", "kappa2", "xbar", "T00", "rhoQ", "pQ"} {
-		f.Symbols[n] = sym(s, n)
-	}
+	// Stable shared identities: one ref per repeated quantity, reused at
+	// every site below. The map keeps only genuinely shared refs.
+	f.NRef = sym(s, "N")
+	f.Symbols["N"] = f.NRef
+	f.UPhiRef = sym(s, "Uphi")
+	f.Symbols["Uphi"] = f.UPhiRef
 	f.Conds["aNonzero"] = condNEQ(s, a)
 	// No phiNonzero condition is minted: post-P1 polynomial differentiation
 	// manufactures no Pow(phi,0) node, so the WDW pieces hold on the full
 	// declared domain including phi = 0.
 	f.Conds["aPos"] = condGTE(s, a)
-	f.Conds["nNonzero"] = condNEQ(s, physmath.NewEphemeralSymbol("N"))
+	f.Conds["nNonzero"] = condNEQ(s, mustResolve(s, f.NRef))
 	rfn := mintFn(s, []physmath.ParameterID{pa, pp},
 		physmath.Add(physmath.Pow(a, physmath.MustRational(2, 1)),
 			physmath.Pow(phi, physmath.MustRational(2, 1)), physmath.MustRational(1, 1)))
@@ -163,7 +182,7 @@ func Build() *Fixture {
 	f.Derivs = append(f.Derivs, d1Deriv, d2Deriv, outDeriv)
 	// Residual ĤR with k=0, Λ=0, U opaque: -1/2a³·∂²R + κ̄²/2a³·(a∂_a)²R + a³U.
 	ainv3 := physmath.Pow(a, physmath.MustRational(-3, 1))
-	u := physmath.NewEphemeralSymbol("Uphi")
+	u := mustResolve(s, f.UPhiRef)
 	resid := physmath.Add(
 		physmath.Mul(physmath.MustRational(-1, 2), ainv3, mustResolve(s, f.D2PhiRef)),
 		physmath.Mul(physmath.Mul(physmath.MustRational(1, 2), kap), ainv3, mustResolve(s, f.AdaRef)),
@@ -190,7 +209,7 @@ func Build() *Fixture {
 	// Full RHS assembly per paper (75) from the executed partials. The
 	// time-derivative left-hand sides stay represented relations; only the
 	// right-hand sides are constructed here, from replayed partials.
-	neph := physmath.NewEphemeralSymbol("N")
+	neph := mustResolve(s, f.NRef)
 	f.GuidePhiRef, err = physmath.PutExpression(s, physmath.Mul(neph,
 		physmath.Pow(a, physmath.MustRational(-3, 1)), mustResolve(s, f.DPhiSRef)))
 	if err != nil {
@@ -205,6 +224,7 @@ func Build() *Fixture {
 	// Test amplitude A(a) = a²+1: ρQ/pQ chain (76-77).
 	amp := physmath.Add(physmath.Pow(a, physmath.MustRational(2, 1)), physmath.MustRational(1, 1))
 	ampFn := mintFn(s, []physmath.ParameterID{pa}, amp)
+	f.AmpFunRef = ampFn
 	ampRef, err := refOf(s, ampFn)
 	if err != nil {
 		panic(err)
@@ -281,13 +301,13 @@ func Build() *Fixture {
 		panic(err)
 	}
 	u0 := physmath.Mul(mustResolve(s, mustComp(s, sel, 0)),
-		physmath.Pow(physmath.NewEphemeralSymbol("N"), physmath.MustRational(-1, 1)))
+		physmath.Pow(mustResolve(s, f.NRef), physmath.MustRational(-1, 1)))
 	f.U0Ref, err = physmath.PutExpression(s, u0)
 	if err != nil {
 		panic(err)
 	}
 	// T_Q^00 = (ρQ+pQ)·U^0·U^0 − pQ·g^00 with g^00 = 1/N² represented.
-	g00 := physmath.Pow(physmath.NewEphemeralSymbol("N"), physmath.MustRational(-2, 1))
+	g00 := physmath.Pow(mustResolve(s, f.NRef), physmath.MustRational(-2, 1))
 	tq00 := physmath.Add(
 		physmath.Mul(physmath.Add(mustResolve(s, f.RhoQRef), mustResolve(s, f.PQRef)),
 			mustResolve(s, f.U0Ref), mustResolve(s, f.U0Ref)),
@@ -330,15 +350,188 @@ func Build() *Fixture {
 	if err != nil {
 		panic(err)
 	}
+	f.buildFRWCovariant(s)
 	return f
 }
 
+// buildFRWCovariant constructs the FRW covariant-derivative fragment inside
+// the fixture store: Cartesian chart, general inverse, Levi-Civita
+// connection, test covector, evaluated derivative, and certificate. All
+// derivation evidence is minted into f.Derivs for Verify(). The scale
+// factor keeps its fixture-wide bound identity (parameter 0), disjoint
+// from the chart coordinates, so spatial partials vanish by the FRW
+// symmetries and the connection coefficients compute to zero.
+func (f *Fixture) buildFRWCovariant(s physmath.Store) {
+	// Parameter-identity discipline: chart coordinates must occupy ordinal
+	// PIDs 0-2 of their declaring function (spec §8.3), which the fixture's
+	// scale factor `a` (PID 0) already uses. A shared PID would make
+	// differentiation confuse the scale factor with a coordinate, so the
+	// covariant fragment uses a distinct scale-factor identity `a` at
+	// PID 3: same display label, different mathematical variable, recorded
+	// here and in the manifest. The determinant/volume path keeps the
+	// original FRWMetricRef untouched.
+	px := physmath.DeriveParameterID(0)
+	py := physmath.DeriveParameterID(1)
+	pz := physmath.DeriveParameterID(2)
+	ps := physmath.DeriveParameterID(3)
+	x := physmath.NewBoundSymbol("x", px)
+	y := physmath.NewBoundSymbol("y", py)
+	z := physmath.NewBoundSymbol("z", pz)
+	ascale := physmath.NewBoundSymbol("a", ps)
+	declFn := mintFn(s, []physmath.ParameterID{px, py, pz}, x)
+	f.FRWDeclFnRef = declFn
+	desig, err := physmath.PutExpression(s, physmath.NewEphemeralSymbol("frw_cartesian_space"))
+	if err != nil {
+		panic(err)
+	}
+	spaceRaw, err := physmath.Collection{ElementRefs: []artifact.ArtifactRef{desig}}.Encode()
+	if err != nil {
+		panic(err)
+	}
+	space, err := s.Put(physmath.FamilyCollection, spaceRaw)
+	if err != nil {
+		panic(err)
+	}
+	coordRef := func(e physmath.Expr) artifact.ArtifactRef {
+		r, err := physmath.PutExpression(s, e)
+		if err != nil {
+			panic(err)
+		}
+		return r
+	}
+	chart := physmath.CoordinateSystem{Dimension: 3,
+		CoordinateRefs: []artifact.ArtifactRef{coordRef(x), coordRef(y), coordRef(z)},
+		SpaceRef:       space}
+	if err := chart.Validate(); err != nil {
+		panic(err)
+	}
+	f.FRWChartRef, err = s.Put(physmath.FamilyCoordinateSystem, chart.Encode())
+	if err != nil {
+		panic(err)
+	}
+	f.FRWMapping = physmath.CoordParamMap{Entries: []physmath.BoundParameterRef{
+		{DeclaringArtifactRef: declFn, ParameterID: px},
+		{DeclaringArtifactRef: declFn, ParameterID: py},
+		{DeclaringArtifactRef: declFn, ParameterID: pz},
+	}}
+	// Covariant-fragment metric over the disjoint scale identity.
+	a2cov := physmath.Pow(ascale, physmath.MustRational(2, 1))
+	f.FRWCovMetricRef = diagTensor(s, []physmath.Expr{a2cov, a2cov, a2cov})
+	// General inverse of the fragment metric (never a diagonal shortcut).
+	detRef, _, err := physmath.GeneralDeterminant(s, f.FRWCovMetricRef)
+	if err != nil {
+		panic(err)
+	}
+	detExpr, err := resolveExprRef(s, f, detRef)
+	if err != nil {
+		panic(err)
+	}
+	cond := condNEQExpr(s, detExpr)
+	connRef, connDeriv, err := physmath.LeviCivita(s, f.FRWCovMetricRef, f.FRWChartRef,
+		f.FRWMapping, declFn, []artifact.ArtifactRef{cond})
+	if err != nil {
+		panic(err)
+	}
+	f.FRWConnRef = connRef
+	f.FRWConnDerivRef = mustMintDerivation(s, connDeriv)
+	f.Derivs = append(f.Derivs, f.FRWConnDerivRef)
+	// Test covector omega = [x, y, z] over the chart space.
+	mkIdx := func(label string) artifact.ArtifactRef {
+		p, err := physmath.Index{Label: label, Variance: physmath.VarianceCovariant, Space: &space}.Encode()
+		if err != nil {
+			panic(err)
+		}
+		r, err := s.Put(physmath.FamilyIndex, p)
+		if err != nil {
+			panic(err)
+		}
+		return r
+	}
+	crefs := []artifact.ArtifactRef{
+		mustStoreExprOf(s, x), mustStoreExprOf(s, y), mustStoreExprOf(s, z),
+	}
+	tn := physmath.Tensor{Rank: 1, Dimension: 3,
+		IndexRefs: []artifact.ArtifactRef{mkIdx("nu")}, ComponentRefs: crefs}
+	if err := tn.Validate(); err != nil {
+		panic(err)
+	}
+	omega, err := s.Put(physmath.FamilyTensor, tn.Encode())
+	if err != nil {
+		panic(err)
+	}
+	omegaField, err := s.Put(physmath.FamilyTensorField,
+		physmath.TensorField{TensorRef: omega, CoordinateSystemRef: f.FRWChartRef}.Encode())
+	if err != nil {
+		panic(err)
+	}
+	f.FRWCovFieldRef = omegaField
+	wres, wderiv, err := physmath.EvaluateCovariantDerivative(s, omegaField, connRef,
+		f.FRWMapping, declFn, nil)
+	if err != nil {
+		panic(err)
+	}
+	f.FRWCovResultRef = wres
+	f.FRWCovDerivRef = mustMintDerivation(s, wderiv)
+	f.Derivs = append(f.Derivs, f.FRWCovDerivRef)
+	rec := physmath.CovariantEvaluation{FieldRef: omegaField, ConnectionRef: connRef,
+		ResultRef: wres, DerivationRef: f.FRWCovDerivRef}
+	if err := rec.Validate(); err != nil {
+		panic(err)
+	}
+	if err := physmath.CheckCovariantEvaluation(s, rec, f.FRWMapping, declFn); err != nil {
+		panic(err)
+	}
+	f.FRWCovEvalRef, err = s.Put(physmath.FamilyCovariantEvaluation, rec.Encode())
+	if err != nil {
+		panic(err)
+	}
+}
+
+// condNEQExpr mints an exact NEQ(e,0) condition/1 artifact.
+func condNEQExpr(s physmath.Store, e physmath.Expr) artifact.ArtifactRef {
+	body, err := physmath.EncodeRelationBody(physmath.OpNEQ, e, physmath.MustRational(0, 1))
+	if err != nil {
+		panic(err)
+	}
+	rel, err := s.Put(physmath.FamilyRelation, body)
+	if err != nil {
+		panic(err)
+	}
+	cond, err := s.Put(physmath.FamilyCondition, rel.Encode())
+	if err != nil {
+		panic(err)
+	}
+	return cond
+}
+
+// resolveExprRef resolves an expression/1 reference to its value.
+func resolveExprRef(s physmath.Store, f *Fixture, ref artifact.ArtifactRef) (physmath.Expr, error) {
+	_ = f
+	fam, payload, err := s.Lookup(ref)
+	if err != nil {
+		return physmath.Expr{}, err
+	}
+	if fam != physmath.FamilyExpression {
+		return physmath.Expr{}, fmt.Errorf("not expression/1")
+	}
+	return physmath.DecodeExpr(artifact.NewDecoder(payload))
+}
+
+// mustStoreExprOf mints an expression/1 artifact, panicking on error.
+func mustStoreExprOf(s physmath.Store, e physmath.Expr) artifact.ArtifactRef {
+	ref, err := physmath.PutExpression(s, e)
+	if err != nil {
+		panic(err)
+	}
+	return ref
+}
+
 // Verify replays every stored evidence derivation and checks the explicit
-// Q/density construction relation. It establishes that the recorded
-// computations reproduce from their premises; it does not solve equations,
-// evolve time, or verify the full Wheeler-DeWitt theory. Representations
-// without derivation evidence (symbols, assumptions, the Q relation shape
-// itself) are checked as constructions, never described as replayed.
+// Q/density relation and the FRW covariant record. It establishes that the
+// recorded computations reproduce from their premises; it does not solve
+// equations, evolve time, or verify the full Wheeler-DeWitt theory.
+// Representations without derivation evidence (symbols, assumptions) are
+// checked as constructions, never described as replayed.
 func (f *Fixture) Verify() error {
 	for i, dref := range f.Derivs {
 		if err := replayDerivation(f.Store, i, dref); err != nil {
@@ -350,11 +543,165 @@ func (f *Fixture) Verify() error {
 	if err := replayDerivation(f.Store, -1, f.FRWDerivRef); err != nil {
 		return fmt.Errorf("FRW determinant evidence: %w", err)
 	}
-	// Q/density construction check: Q must equal Mul(a³, ρQ) canonically.
-	// This verifies the dependency shape, not a derivation: Q is built by
-	// construction, and its derivative (replayed above via Derivs) acts on Q.
-	if err := checkQRelation(f.Store, f.QRef, f.RhoQRef); err != nil {
+	// Q/density relation: decode the STORED equation and verify its
+	// content, with `a` resolved through the amplitude declaring function.
+	if err := checkQRelation(f.Store, f.QRelRef, f.QRef, f.RhoQRef, f.AmpFunRef); err != nil {
 		return err
+	}
+	// FRW covariant fragment: the stored evaluation record must resolve,
+	// replay through its derivation, and match recomputation; the result
+	// tensor must carry the chart-bound structure and Kronecker values.
+	if err := f.verifyCovariant(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// verifyCovariant validates the fixture-integrated covariant fragment:
+// record resolution, store-aware check (replay + recomputation), result
+// rank/component count, derivative-index-first ordering with exact index
+// identities, both slots covariant over the chart space, and the
+// hand-derived Kronecker component values.
+func (f *Fixture) verifyCovariant() error {
+	fam, payload, err := f.Store.Lookup(f.FRWCovEvalRef)
+	if err != nil {
+		return fmt.Errorf("covariant record unresolvable: %w", err)
+	}
+	if fam != physmath.FamilyCovariantEvaluation {
+		return fmt.Errorf("covariant record is not covariant_evaluation/1")
+	}
+	rec, err := physmath.DecodeCovariantEvaluation(payload)
+	if err != nil {
+		return fmt.Errorf("covariant record undecodable: %w", err)
+	}
+	if rec.FieldRef != f.FRWCovFieldRef {
+		return fmt.Errorf("covariant record field is not the fixture covector")
+	}
+	if rec.ConnectionRef != f.FRWConnRef {
+		return fmt.Errorf("covariant record connection is not the fixture connection")
+	}
+	if rec.ResultRef != f.FRWCovResultRef {
+		return fmt.Errorf("covariant record result is not the fixture result")
+	}
+	if rec.DerivationRef != f.FRWCovDerivRef {
+		return fmt.Errorf("covariant record derivation is not the fixture derivation")
+	}
+	if err := physmath.CheckCovariantEvaluation(f.Store, rec, f.FRWMapping, f.FRWDeclFnRef); err != nil {
+		return fmt.Errorf("covariant record invalid: %w", err)
+	}
+	rfam, rpayload, err := f.Store.Lookup(f.FRWCovResultRef)
+	if err != nil {
+		return fmt.Errorf("covariant result unresolvable: %w", err)
+	}
+	if rfam != physmath.FamilyTensorField {
+		return fmt.Errorf("covariant result is not tensor_field/1")
+	}
+	rf, err := physmath.DecodeTensorField(rpayload)
+	if err != nil {
+		return fmt.Errorf("covariant result undecodable: %w", err)
+	}
+	if rf.CoordinateSystemRef != f.FRWChartRef {
+		return fmt.Errorf("covariant result chart not preserved")
+	}
+	tfam, tpayload, err := f.Store.Lookup(rf.TensorRef)
+	if err != nil {
+		return fmt.Errorf("covariant result tensor unresolvable: %w", err)
+	}
+	if tfam != physmath.FamilyTensor {
+		return fmt.Errorf("covariant result tensor is not tensor/1")
+	}
+	tn, err := physmath.DecodeTensor(tpayload)
+	if err != nil {
+		return fmt.Errorf("covariant result tensor undecodable: %w", err)
+	}
+	if tn.Rank != 2 || len(tn.ComponentRefs) != 9 {
+		return fmt.Errorf("covariant result shape wrong")
+	}
+	if len(tn.IndexRefs) != 2 {
+		return fmt.Errorf("covariant result index count wrong")
+	}
+	for i, r := range tn.IndexRefs {
+		ifam, ipayload, err := f.Store.Lookup(r)
+		if err != nil {
+			return fmt.Errorf("covariant result index %d unresolvable: %w", i, err)
+		}
+		if ifam != physmath.FamilyIndex {
+			return fmt.Errorf("covariant result index %d is not index/1", i)
+		}
+		idx, err := physmath.DecodeIndex(ipayload)
+		if err != nil {
+			return fmt.Errorf("covariant result index %d undecodable: %w", i, err)
+		}
+		if idx.Variance != physmath.VarianceCovariant {
+			return fmt.Errorf("covariant result index %d is not covariant", i)
+		}
+		if idx.Space == nil {
+			return fmt.Errorf("covariant result index %d lacks space", i)
+		}
+		cfam, cpayload, err := f.Store.Lookup(f.FRWChartRef)
+		if err != nil {
+			return fmt.Errorf("covariant chart unresolvable: %w", err)
+		}
+		if cfam != physmath.FamilyCoordinateSystem {
+			return fmt.Errorf("covariant chart is not coordinate_system/1")
+		}
+		chart, err := physmath.DecodeCoordinateSystem(cpayload)
+		if err != nil {
+			return fmt.Errorf("covariant chart undecodable: %w", err)
+		}
+		if *idx.Space != chart.SpaceRef {
+			return fmt.Errorf("covariant result index %d space differs from chart space", i)
+		}
+	}
+	// Derivative index first, original covector index second: exact ordered
+	// identity against the input field's slot.
+	wfield, wfpayload, err := f.Store.Lookup(f.FRWCovFieldRef)
+	if err != nil {
+		return fmt.Errorf("covariant input field unresolvable: %w", err)
+	}
+	if wfield != physmath.FamilyTensorField {
+		return fmt.Errorf("covariant input field is not tensor_field/1")
+	}
+	wf, err := physmath.DecodeTensorField(wfpayload)
+	if err != nil {
+		return fmt.Errorf("covariant input field undecodable: %w", err)
+	}
+	wtfam, wtpayload, err := f.Store.Lookup(wf.TensorRef)
+	if err != nil {
+		return fmt.Errorf("covariant input tensor unresolvable: %w", err)
+	}
+	if wtfam != physmath.FamilyTensor {
+		return fmt.Errorf("covariant input tensor is not tensor/1")
+	}
+	wt, err := physmath.DecodeTensor(wtpayload)
+	if err != nil {
+		return fmt.Errorf("covariant input tensor undecodable: %w", err)
+	}
+	if len(wt.IndexRefs) != 1 || tn.IndexRefs[1] != wt.IndexRefs[0] {
+		return fmt.Errorf("covariant free index not preserved in order")
+	}
+	one, err := physmath.MustRational(1, 1).Encode()
+	if err != nil {
+		return err
+	}
+	zero, err := physmath.MustRational(0, 1).Encode()
+	if err != nil {
+		return err
+	}
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 3; j++ {
+			want := zero
+			if i == j {
+				want = one
+			}
+			_, cp, err := f.Store.Lookup(tn.ComponentRefs[i*3+j])
+			if err != nil {
+				return fmt.Errorf("covariant result component (%d,%d) unresolvable: %w", i, j, err)
+			}
+			if string(cp) != string(want) {
+				return fmt.Errorf("covariant result component (%d,%d) is not Kronecker", i, j)
+			}
+		}
 	}
 	return nil
 }
@@ -374,15 +721,51 @@ func replayDerivation(s physmath.Store, i int, dref artifact.ArtifactRef) error 
 	return nil
 }
 
-// checkQRelation resolves Q and ρQ and requires Q to equal the canonical
-// Mul(a³, ρQ) construction with the bound scale-factor identity.
-func checkQRelation(s physmath.Store, qref, rhoref artifact.ArtifactRef) error {
+// checkQRelation verifies the actual equation referenced by relRef: it must
+// decode as an EQ relation whose left side is byte-identical to the stored
+// Q expression and whose right side canonically equals Mul(a³, ρQ), with `a`
+// resolved as parameter 0 of the stored amplitude declaring function (never
+// a magic ordinal or display-name match).
+func checkQRelation(s physmath.Store, relRef, qref, rhoref, ampFnRef artifact.ArtifactRef) error {
+	relfam, relpayload, err := s.Lookup(relRef)
+	if err != nil {
+		return fmt.Errorf("Q relation unresolvable: %w", err)
+	}
+	if relfam != physmath.FamilyRelation {
+		return fmt.Errorf("Q relation is not relation/1")
+	}
+	rd := artifact.NewDecoder(relpayload)
+	opStr, err := rd.String()
+	if err != nil {
+		return fmt.Errorf("Q relation missing operator: %w", err)
+	}
+	if opStr != string(physmath.OpEQ) {
+		return fmt.Errorf("Q relation is not an equality")
+	}
+	relLeft, err := physmath.DecodeExpr(rd)
+	if err != nil {
+		return fmt.Errorf("Q relation left undecodable: %w", err)
+	}
+	relRight, err := physmath.DecodeExpr(rd)
+	if err != nil {
+		return fmt.Errorf("Q relation right undecodable: %w", err)
+	}
+	if !rd.Exhausted() {
+		return fmt.Errorf("trailing bytes in Q relation")
+	}
 	qf, qpayload, err := s.Lookup(qref)
 	if err != nil {
 		return fmt.Errorf("Q unresolvable: %w", err)
 	}
 	if qf != physmath.FamilyExpression {
 		return fmt.Errorf("Q is not expression/1")
+	}
+	lb, err := relLeft.Encode()
+	if err != nil {
+		return fmt.Errorf("Q relation left unencodable: %w", err)
+	}
+	if string(lb) != string(qpayload) {
+		return fmt.Errorf("Q relation left side is not the stored Q")
 	}
 	rf, rpayload, err := s.Lookup(rhoref)
 	if err != nil {
@@ -391,27 +774,47 @@ func checkQRelation(s physmath.Store, qref, rhoref artifact.ArtifactRef) error {
 	if rf != physmath.FamilyExpression {
 		return fmt.Errorf("density is not expression/1")
 	}
-	q, err := physmath.DecodeExpr(artifact.NewDecoder(qpayload))
-	if err != nil {
-		return fmt.Errorf("Q undecodable: %w", err)
-	}
 	rho, err := physmath.DecodeExpr(artifact.NewDecoder(rpayload))
 	if err != nil {
 		return fmt.Errorf("density undecodable: %w", err)
 	}
-	a := physmath.NewBoundSymbol("a", physmath.DeriveParameterID(0))
+	a, err := amplitudeScaleFactor(s, ampFnRef)
+	if err != nil {
+		return err
+	}
 	want, err := physmath.Canonicalize(physmath.Mul(physmath.Pow(a, physmath.MustRational(3, 1)), rho))
 	if err != nil {
 		return fmt.Errorf("Q relation expectation unbuildable: %w", err)
 	}
-	got, err := physmath.Canonicalize(q)
+	rb, err := physmath.Canonicalize(relRight)
 	if err != nil {
-		return fmt.Errorf("Q uncanonicalizable: %w", err)
+		return fmt.Errorf("Q relation right uncanonicalizable: %w", err)
 	}
-	if !got.Equal(want) {
-		return fmt.Errorf("Q is not Mul(a³, density) by canonical identity")
+	if !rb.Equal(want) {
+		return fmt.Errorf("Q relation right side is not Mul(a³, density)")
 	}
 	return nil
+}
+
+// amplitudeScaleFactor resolves the scale-factor symbol through the stored
+// amplitude declaring function: parameter 0 of that function is the `a`
+// identity used across the fixture. No ordinal literal, no label match.
+func amplitudeScaleFactor(s physmath.Store, ampFnRef artifact.ArtifactRef) (physmath.Expr, error) {
+	ffam, fpayload, err := s.Lookup(ampFnRef)
+	if err != nil {
+		return physmath.Expr{}, fmt.Errorf("amplitude function unresolvable: %w", err)
+	}
+	if ffam != physmath.FamilyFunction {
+		return physmath.Expr{}, fmt.Errorf("amplitude target is not function/1: %w", physmath.ErrBadInput)
+	}
+	fn, err := physmath.DecodeFunction(artifact.NewDecoder(fpayload))
+	if err != nil {
+		return physmath.Expr{}, fmt.Errorf("amplitude function undecodable: %w", err)
+	}
+	if len(fn.ParameterIDs) < 1 {
+		return physmath.Expr{}, fmt.Errorf("amplitude function declares no parameter: %w", physmath.ErrBadInput)
+	}
+	return physmath.NewBoundSymbol("a", fn.ParameterIDs[0]), nil
 }
 
 // mintFn mints a function/1 artifact with a validated body.
