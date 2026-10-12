@@ -1,0 +1,54 @@
+{
+  "schema_version": "1",
+  "artifact_type": "derivation",
+  "derivation_id": "bohm_qe_minisuperspace",
+  "framework_id": "bohmian_mechanics",
+  "name": "Dürr–Struyve Minisuperspace D-QE3 Evidence (fixture)",
+  "entry_points": {
+    "primary": "minisuperspace.Build",
+    "secondary": "Fixture.Verify"
+  },
+  "source": {
+    "arxiv_id": "2003.03839v2",
+    "pdf_sha256_hex": "6b384518d75d59351285ab0f761ce722d1196d08b0e139bce637cf7bcbbffcbb",
+    "representation": "TOE-v4/pdf/dr_durr_2003.pdf (byte-identical to 2003.03839v2.pdf)",
+    "scope_note": "Section 6 eqs 67-78; WDW operator, guidance RHS, rhoQ/pQ, TQ assembly, FRW volume"
+  },
+  "regime": "homogeneous isotropic minisuperspace toy model; symmetry-reduced quantization, flat spatial chart",
+  "conventions": {
+    "metric_signature": "+---",
+    "operator_ordering": "Laplace-Beltrami",
+    "kappa_bar_squared": "opaque symbol (4πG/3 asserted, not derived)",
+    "potential_U": "opaque symbol (no internal definition represented)"
+  },
+  "premises": [
+    {"id": "test_wavefunction_R", "statement": "R(a,φ) = a²+φ²+1 as expression/1 over declared (a,φ); test input only, not a WDW solution."},
+    {"id": "test_phase_S", "statement": "S(a,φ) = a·φ as expression/1; RHS partials executed, LHS time evolution not derived."},
+    {"id": "test_amplitude_A", "statement": "A(a) = a²+1 as expression/1; amplitude/phase split stipulated, not decomposed."},
+    {"id": "wdw_operator_pieces", "statement": "∂²_φ and (a∂_a)² applied via DIFFERENTIATE-001 with replayed derivations; (a∂_a)² by composition a·∂_a(a·∂_a·)."},
+    {"id": "quantum_density_pressure", "statement": "ρQ/pQ assembled from replayed partials with NEQ(a,0) and NEQ(A,0) conditions; quotient via negative-power rule."},
+    {"id": "tq_assembly", "statement": "T_Q^00 from ρQ, pQ, comoving U^0 (Kronecker selector over inverse lapse), g^00; construction only."},
+    {"id": "frw_volume", "statement": "diag(a²,a²,a²) determinant via replayed CANON+SIMPLIFY; a³ factor gated on cited a>0; product form preserved (not a^6)."}
+  ],
+  "assumptions": [
+    "a_nonzero",
+    "a_positive",
+    "lapse_nonzero",
+    "flat_spatial_chart",
+    "toy_model_disclaimer",
+    "lb_operator_ordering",
+    "opaque_potential_U"
+  ],
+  "verification": {
+    "primary_derivation_trace": "replayed DIFFERENTIATE/CANON/SIMPLIFY derivations per evidence piece",
+    "secondary_verification": "Fixture.Verify replays all stored derivations; hand-derived goldens pin operator composition, quotient expansion, and volume provenance"
+  },
+  "limitations": [
+    {"id": "no_equation_solving", "statement": "The WDW residual is computed and recorded, never solved; no ψ satisfying Ĥψ=0 is constructed."},
+    {"id": "no_time_evolution", "statement": "Guidance LHS time derivatives are represented relations; evolution is not derived."},
+    {"id": "no_full_wdw", "statement": "Minisuperspace is the paper's symmetry-reduced toy model, not the full Wheeler-DeWitt theory (functional derivatives unrepresented)."},
+    {"id": "no_functional_variation", "statement": "δ/δh and δ/δφ remain unimplemented pending the reduced-variation layer."},
+    {"id": "no_curvature", "statement": "R^(3), R, and covariant derivatives are represented at most; k enters only as an assumption."},
+    {"id": "factored_normals", "statement": "Simplified forms preserve factored structure (no distributivity or x+x→2x); equalities to collapsed monomials are hand-verified in test comments, not executed."}
+  ]
+}
