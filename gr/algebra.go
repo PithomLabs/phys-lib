@@ -29,6 +29,11 @@ const (
 	GSin      GRKind = 0x07
 	GCos      GRKind = 0x08
 	GUnknown  GRKind = 0x09
+	// R1 opaque hyperbolic nodes (K1 Rindler (6)): typed GR-local
+	// function identities, never projected. Representation does not
+	// imply hyperbolic evaluation.
+	GSinh GRKind = 0x0A
+	GCosh GRKind = 0x0B
 )
 
 // GRExpr is a GR-local mathematical expression. Sin/Cos/Unknown atoms and
@@ -47,7 +52,7 @@ type GRExpr struct {
 	// Add / Mul children.
 	Children []GRExpr
 
-	// Neg operand; Sin / Cos argument.
+	// Neg operand; Sin / Cos / Sinh / Cosh argument.
 	Operand *GRExpr
 
 	// Pow base and integer exponent.
@@ -104,6 +109,19 @@ func NewGSin(arg GRExpr) GRExpr {
 func NewGCos(arg GRExpr) GRExpr {
 	a := arg
 	return GRExpr{Kind: GCos, Operand: &a}
+}
+
+// NewGSinh builds a GR-local hyperbolic-sine application (never projected;
+// Rindler (6) representation only, no hyperbolic evaluation).
+func NewGSinh(arg GRExpr) GRExpr {
+	a := arg
+	return GRExpr{Kind: GSinh, Operand: &a}
+}
+
+// NewGCosh builds a GR-local hyperbolic-cosine application (never projected).
+func NewGCosh(arg GRExpr) GRExpr {
+	a := arg
+	return GRExpr{Kind: GCosh, Operand: &a}
 }
 
 // NewGUnknown builds a GR-local opaque function atom such as A(r): the shape
@@ -166,7 +184,7 @@ func (g GRExpr) ToPhysMath() (physmath.Expr, error) {
 			return physmath.Expr{}, fmt.Errorf("%w: %v", ErrUnrepresentableProjection, err)
 		}
 		return physmath.Pow(b, x), nil
-	case GSin, GCos, GUnknown:
+	case GSin, GCos, GUnknown, GSinh, GCosh:
 		return physmath.Expr{}, fmt.Errorf("%w: GR-local %s has no PhysMath family",
 			ErrUnrepresentableProjection, g.Kind)
 	default:
@@ -193,6 +211,10 @@ func (k GRKind) String() string {
 		return "Sin"
 	case GCos:
 		return "Cos"
+	case GSinh:
+		return "Sinh"
+	case GCosh:
+		return "Cosh"
 	case GUnknown:
 		return "Unknown"
 	default:

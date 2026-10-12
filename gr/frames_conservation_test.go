@@ -99,3 +99,45 @@ func TestProtocolSketchValidation(t *testing.T) {
 		t.Fatal("undescribed step accepted")
 	}
 }
+
+// R3 volume-assumption wiring: the Rindler |xbar| -> xbar reduction is
+// licensed only by a cited xbar > 0 condition captured into a framework
+// assumption. The math layer gates on condition presence; the gr layer
+// records whose convention it is.
+func TestRindlerDomainAssumptionWiring(t *testing.T) {
+	s, _ := testStoreFW(t)
+	xbar := physmath.NewEphemeralSymbol("xbar")
+	body, err := physmath.EncodeRelationBody(physmath.OpGTE, xbar, physmath.MustRational(0, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	relRef, err := s.Put(physmath.FamilyRelation, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	condRef, err := s.Put(physmath.FamilyCondition, relRef.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	asm, err := CaptureCondition(s, condRef, "rindler_positive_radius",
+		CategoryModel, "Rindler chart domain xbar > 0 licensing |xbar| -> xbar.")
+	if err != nil {
+		t.Fatalf("capture failed: %v", err)
+	}
+	if len(asm.ConditionRefs) != 1 || asm.ConditionRefs[0] != condRef {
+		t.Fatal("captured assumption does not cite the domain condition")
+	}
+	asmRef, err := asm.Mint(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The captured assumption carries the convention; the math-layer
+	// VolumeDensity gates the reduction on the condition ref itself
+	// (tested in phys-math density tests). Record the linkage here.
+	factor, err := physmath.PutExpression(s, xbar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = factor
+	_ = asmRef
+}

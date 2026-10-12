@@ -48,11 +48,24 @@ func TestCorruptedOutputFailsReplay(t *testing.T) {
 func TestSketchRecordsPartialExecution(t *testing.T) {
 	f := maxwellbox.Build()
 	unsup := f.Sketch.UnsupportedSteps()
-	if len(unsup) != 4 {
-		t.Fatalf("want 4 unsupported sketch steps, got %v", unsup)
+	if len(unsup) != 3 {
+		t.Fatalf("want 3 unsupported sketch steps, got %v", unsup)
+	}
+	for _, want := range []string{"s1", "s2", "s3"} {
+		found := false
+		for _, got := range unsup {
+			if got == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("step %s not in unsupported list %v", want, unsup)
+		}
 	}
 	for _, s := range f.Sketch.Steps {
-		if s.Status == "SUPPORTED" && (s.StepID == "s5" || s.StepID == "s6") {
+		// s4 SUPPORTED is covered by TestS4SupportedCitesInference
+		// (must cite the flux-inference conclusion); s5/s6 by replay.
+		if s.Status == "SUPPORTED" && (s.StepID == "s4" || s.StepID == "s5" || s.StepID == "s6") {
 			continue
 		}
 		if s.Status != "UNSUPPORTED" {
@@ -74,5 +87,36 @@ func TestBuildDeterminism(t *testing.T) {
 	}
 	if ra != rb {
 		t.Fatal("fixture build is nondeterministic")
+	}
+}
+
+func TestS4SupportedCitesInference(t *testing.T) {
+	f := maxwellbox.Build()
+	for _, st := range f.Sketch.Steps {
+		if st.StepID != "s4" {
+			continue
+		}
+		if st.Status != "SUPPORTED" {
+			t.Fatalf("s4 status = %q, want SUPPORTED via flux inference", st.Status)
+		}
+		if len(st.Refs) != 1 || st.Refs[0] != f.FluxCert.ConclusionRef {
+			t.Fatal("s4 does not cite exactly the flux-inference conclusion")
+		}
+		// Conclusion resolves to the assembled EQ(bulk, caps) relation.
+		fam, _, err := f.Store.Lookup(f.FluxCert.ConclusionRef)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fam != physmath.FamilyRelation {
+			t.Fatal("s4 conclusion is not relation/1")
+		}
+	}
+	// Determinism: identical evidence re-mints the identical conclusion.
+	g := maxwellbox.Build()
+	if f.FluxCert.ConclusionRef != g.FluxCert.ConclusionRef {
+		t.Fatal("flux inference conclusion nondeterministic across builds")
+	}
+	if f.FluxCert.CertDigest() != g.FluxCert.CertDigest() {
+		t.Fatal("flux certificate digest nondeterministic across builds")
 	}
 }

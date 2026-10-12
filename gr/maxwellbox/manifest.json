@@ -21,7 +21,10 @@
     "cosmological_constant": "0"
   },
   "premises": [
-    {"id": "minkowski_bilinear", "statement": "diag(-1,1,1,1) as symmetric_bilinear/1, self-inverse asserted, symmetry checked."},
+    {"id": "minkowski_bilinear", "statement": "diag(-1,1,1,1) as symmetric_bilinear/1; symmetry checked; no inverse claim."},
+    {"id": "rindler_bilinear", "statement": "diag(-xbar^2,1,1,1) as symmetric_bilinear/1, schematic s1 geometry; hyperbolic transform stays gr-local."},
+    {"id": "diagonal_determinants", "statement": "Minkowski det exactly -1 and Rindler det canonical product, both via replayed CANON+SIMPLIFY derivations; no new rules."},
+    {"id": "volume_densities", "statement": "Minkowski factor 1; Rindler |xbar| unreduced plus xbar-gated reduction; FRW a^3 pattern covered by tests, not fixture."},
     {"id": "energy_integral", "statement": "integral/1 over hypersurface domain/1 with tensor integrand; represented, never executed."},
     {"id": "contraction_certificate", "statement": "Validated co/contra slot pairing on a schematic rank-2 tensor; structural certificate, no evaluation."},
     {"id": "endpoint_fragments", "statement": "EboxV=gamma*Ebox0 and Ebox0=m*c^2 closed under EXPR-CANON-001 with theorem-conclusion gates."}
@@ -37,7 +40,7 @@
     "secondary_verification": "theorem-conclusion gates plus sketch unsupported-step assertion"
   },
   "limitations": [
-    {"id": "partial_execution", "statement": "Sketch steps s1-s4 are UNSUPPORTED by design; execution coverage is PARTIAL. Green tests prove fragment replay plus honest limitation record, never K1 end-to-end."},
+    {"id": "partial_execution", "statement": "Sketch steps s1-s3 are UNSUPPORTED by design; s4 is schema-checked via FLUX-CONSERVE-001 (evidence-chain conformance, not analysis proof); s5-s6 replay. Execution coverage is PARTIAL. Green tests prove fragment replay plus honest limitation record, never K1 end-to-end."},
     {"id": "schematic_tensor", "statement": "T^a_b components are display symbols, not the paper's field; contraction pairing is structural, not physical."},
     {"id": "endpoint_algebra_only", "statement": "Replayed fragments check canonical endpoint algebra; they do not verify the divergence/flux chain that establishes it."},
     {"id": "scalar_deferred", "statement": "K2/D2 has no fixture in this slice; its mathematics reuses the same families when attempted."}
