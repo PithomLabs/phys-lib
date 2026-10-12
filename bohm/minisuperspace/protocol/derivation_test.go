@@ -879,7 +879,8 @@ func mustAmpFn(t *testing.T, f *ms.Fixture) artifact.ArtifactRef {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fn := physmath.Function{ParameterIDs: []physmath.ParameterID{pa}, BodyRef: bodyRef}
+	fn := physmath.Function{ParameterIDs: []physmath.ParameterID{pa},
+		ParamNames: []string{"a"}, BodyRef: bodyRef}
 	raw, err := fn.Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -1030,7 +1031,8 @@ func mustFnBytes(t *testing.T, s physmath.Store, body physmath.Expr) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fn := physmath.Function{ParameterIDs: []physmath.ParameterID{pa, pp}, BodyRef: bodyRef}
+	fn := physmath.Function{ParameterIDs: []physmath.ParameterID{pa, pp},
+		ParamNames: []string{"a", "phi"}, BodyRef: bodyRef}
 	if err := physmath.ValidateFunctionBody(fn, body); err != nil {
 		t.Fatal(err)
 	}
