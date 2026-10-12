@@ -64,7 +64,7 @@
     },
     {
       "id": "frw_covariant_fragment",
-      "statement": "Flat FRW spatial h_ij=a²δ_ij (covariant-fragment metric, scale identity disjoint from chart coordinates) in a Cartesian chart: general adjugate inverse, vanishing Levi-Civita coefficients verified zero, test-covector derivative with Kronecker-delta goldens, covariant_evaluation/1 certificate and derivation evidence owned and replayed by Fixture.Verify. No side stores."
+      "statement": "Flat FRW spatial h_ij=a²δ_ij (covariant-fragment metric, scale identity disjoint from chart coordinates) in a Cartesian chart: general adjugate inverse, vanishing Levi-Civita coefficients verified zero, test-covector derivative with Kronecker-delta goldens, covariant_evaluation/1 certificate and derivation evidence owned and replayed by Fixture.Verify. No side stores. Parameter-identity scoping is enforced at construction (EvaluateCovariantDerivative, LeviCivita reject collisions before minting) and at verification (store-aware checkers revalidate); raw DIFFERENTIATE-001 callers remain outside this guard by design."
     }
   ],
   "assumptions": [

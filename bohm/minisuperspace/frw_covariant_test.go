@@ -1,6 +1,7 @@
 package minisuperspace
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/PithomLabs/phys-artifact"
@@ -131,6 +132,76 @@ func compOfRef(t *testing.T, f *Fixture, ref artifact.ArtifactRef) artifact.Arti
 		t.Fatal(err)
 	}
 	return m.ComponentRefs[0]
+}
+
+// TestFRWCovariantIdentityGuard proves the disjointness contract on the
+// fixture's own chart: a tensor component binding a chart PID under a
+// different display ("q" on x's PID) is rejected at the identity gate
+// before any artifact is minted, while the committed fixture still
+// verifies clean.
+func TestFRWCovariantIdentityGuard(t *testing.T) {
+	f := Build()
+	if err := f.Verify(); err != nil {
+		t.Fatalf("fixture Verify failed: %v", err)
+	}
+	// Resolve the fixture chart's coordinate PIDs through its declaring
+	// function: position 0 is the x identity.
+	xPid := physmath.DeriveParameterID(0)
+	// Mint a rank-1 tensor over the chart space whose component reuses
+	// x's PID for a distinct quantity "q".
+	space := chartSpaceOf(t, f)
+	ixPayload, err := physmath.Index{Label: "v", Variance: physmath.VarianceContravariant, Space: &space}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix, err := f.Store.Put(physmath.FamilyIndex, ixPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	qComp, err := physmath.PutExpression(f.Store, physmath.NewBoundSymbol("q", xPid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tn := physmath.Tensor{Rank: 1, Dimension: 3,
+		IndexRefs:     []artifact.ArtifactRef{ix},
+		ComponentRefs: []artifact.ArtifactRef{qComp, qComp, qComp}}
+	if err := tn.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	tref, err := f.Store.Put(physmath.FamilyTensor, tn.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	field, err := f.Store.Put(physmath.FamilyTensorField,
+		physmath.TensorField{TensorRef: tref, CoordinateSystemRef: f.FRWChartRef}.Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = physmath.EvaluateCovariantDerivative(f.Store, field, f.FRWConnRef,
+		f.FRWMapping, f.FRWDeclFnRef, nil)
+	if err == nil {
+		t.Fatal("collided identity accepted by evaluator")
+	}
+	if !strings.Contains(err.Error(), "reserved for coordinate") {
+		t.Fatalf("wrong rejection boundary (expected identity gate): %v", err)
+	}
+	// The committed fixture is unaffected by the rejected attempt.
+	if err := f.Verify(); err != nil {
+		t.Fatalf("fixture Verify failed after rejected attempt: %v", err)
+	}
+}
+
+func chartSpaceOf(t *testing.T, f *Fixture) artifact.ArtifactRef {
+	t.Helper()
+	_, payload, err := f.Store.Lookup(f.FRWChartRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chart, err := physmath.DecodeCoordinateSystem(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return chart.SpaceRef
 }
 
 // TestFRWCovariantNegatives proves each failure boundary with fixture
