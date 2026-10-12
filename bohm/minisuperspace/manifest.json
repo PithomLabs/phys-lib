@@ -61,6 +61,10 @@
     {
       "id": "reduced_variation",
       "statement": "Bounded ansatz-derived projection S = Σ2a·γ·V with replayed CANON+SIMPLIFY evidence; spatial integration and fiducial volume stay represented-only."
+    },
+    {
+      "id": "frw_covariant_fragment",
+      "statement": "Flat FRW spatial h_ij=a²δ_ij in a Cartesian chart: general adjugate inverse (never diagonal shortcut), vanishing Levi-Civita coefficients verified zero, test-covector derivative with Kronecker-delta goldens and covariant_evaluation/1 certificate. Action/direct routes stay distinct; no route claimed verified."
     }
   ],
   "assumptions": [
@@ -104,6 +108,10 @@
     {
       "id": "no_empirical_claims",
       "statement": "No observational or experimental consequences are represented or claimed."
+    },
+    {
+      "id": "covariant_scope",
+      "statement": "Covariant evaluation covers the FRW-chart fragment above; general curvature, Bianchi identities, and functional derivatives remain unsupported."
     }
   ],
   "source_mapping": [
