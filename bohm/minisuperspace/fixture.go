@@ -144,7 +144,7 @@ func Build() *Fixture {
 	// it differentiates to 0 as an independent quantity and remains
 	// substitutable via EXPR-SUBSTITUTE-001, unlike an ephemeral symbol.
 	kap := physmath.NewBoundSymbol("kappa2", pk)
-	f.KappaFunRef = mintFn(s, []physmath.ParameterID{pa, pp, pk}, kap)
+	f.KappaFunRef = mintFn(s, []physmath.ParameterID{pa, pp, pk}, []string{"a", "phi", "kappa2"}, kap)
 	// Stable shared identities: one ref per repeated quantity, reused at
 	// every site below. The map keeps only genuinely shared refs.
 	f.NRef = sym(s, "N")
@@ -157,7 +157,7 @@ func Build() *Fixture {
 	// declared domain including phi = 0.
 	f.Conds["aPos"] = condGTE(s, a)
 	f.Conds["nNonzero"] = condNEQ(s, mustResolve(s, f.NRef))
-	rfn := mintFn(s, []physmath.ParameterID{pa, pp},
+	rfn := mintFn(s, []physmath.ParameterID{pa, pp}, []string{"a", "phi"},
 		physmath.Add(physmath.Pow(a, physmath.MustRational(2, 1)),
 			physmath.Pow(phi, physmath.MustRational(2, 1)), physmath.MustRational(1, 1)))
 	f.RFunRef = rfn
@@ -196,7 +196,7 @@ func Build() *Fixture {
 	canonRes := applyReplay(s, physmath.RuleExprCanon, []artifact.ArtifactRef{f.Residual}, nil, nil)
 	_ = canonRes
 	// Test phase S = a·φ: guidance RHS partials (75).
-	sfn := mintFn(s, []physmath.ParameterID{pa, pp}, physmath.Mul(a, phi))
+	sfn := mintFn(s, []physmath.ParameterID{pa, pp}, []string{"a", "phi"}, physmath.Mul(a, phi))
 	f.SRef, err = refOf(s, sfn)
 	if err != nil {
 		panic(err)
@@ -223,7 +223,7 @@ func Build() *Fixture {
 	}
 	// Test amplitude A(a) = a²+1: ρQ/pQ chain (76-77).
 	amp := physmath.Add(physmath.Pow(a, physmath.MustRational(2, 1)), physmath.MustRational(1, 1))
-	ampFn := mintFn(s, []physmath.ParameterID{pa}, amp)
+	ampFn := mintFn(s, []physmath.ParameterID{pa}, []string{"a"}, amp)
 	f.AmpFunRef = ampFn
 	ampRef, err := refOf(s, ampFn)
 	if err != nil {
@@ -378,7 +378,7 @@ func (f *Fixture) buildFRWCovariant(s physmath.Store) {
 	y := physmath.NewBoundSymbol("y", py)
 	z := physmath.NewBoundSymbol("z", pz)
 	ascale := physmath.NewBoundSymbol("a", ps)
-	declFn := mintFn(s, []physmath.ParameterID{px, py, pz}, x)
+	declFn := mintFn(s, []physmath.ParameterID{px, py, pz}, []string{"x", "y", "z"}, x)
 	f.FRWDeclFnRef = declFn
 	desig, err := physmath.PutExpression(s, physmath.NewEphemeralSymbol("frw_cartesian_space"))
 	if err != nil {
@@ -817,13 +817,15 @@ func amplitudeScaleFactor(s physmath.Store, ampFnRef artifact.ArtifactRef) (phys
 	return physmath.NewBoundSymbol("a", fn.ParameterIDs[0]), nil
 }
 
-// mintFn mints a function/1 artifact with a validated body.
-func mintFn(s physmath.Store, ids []physmath.ParameterID, body physmath.Expr) artifact.ArtifactRef {
+// mintFn mints a function/1 artifact with explicit parameter names (the
+// authoritative display vocabulary for differentiation identity; never
+// inferred from the body) and a validated body.
+func mintFn(s physmath.Store, ids []physmath.ParameterID, names []string, body physmath.Expr) artifact.ArtifactRef {
 	bodyRef, err := physmath.PutExpression(s, body)
 	if err != nil {
 		panic(err)
 	}
-	fn := physmath.Function{ParameterIDs: ids, BodyRef: bodyRef}
+	fn := physmath.Function{ParameterIDs: ids, ParamNames: names, BodyRef: bodyRef}
 	if err := physmath.ValidateFunctionBody(fn, body); err != nil {
 		panic(err)
 	}
