@@ -43,6 +43,65 @@ func boundSym(t *testing.T, s *physmath.Store, display string, pid physmath.Para
 	return physmath.NewBoundSymbol(display, pid)
 }
 
+// TestDerivationInventory pins the pitch-count audit for the demo: every
+// derivation artifact the fixture executes and replays, under three
+// documented counting conventions. Any legitimate addition must update
+// this test and the pitch together; the pitch number must never drift
+// silently from executable evidence.
+//
+// Counting conventions (verified against fixture.go Build()):
+//   - Appends into Derivs: 13 (d2phi 1; Ada composition d1,d2,out 3;
+//     guidance dphis,das 2; amplitude ad1,ad2,aout 3; simpW 1; dq 1;
+//     FRW connection 1; FRW covariant evaluation 1).
+//   - Distinct derivation artifacts replayed: 14 (the 13 Derivs plus the
+//     separately stored FRWDerivRef, all derivation/1, all replayed by
+//     Fixture.Verify, all byte-distinct).
+//   - Mathematical units for the pitch: 12 (the Ada composition's three
+//     appends count as one operator unit; the two FRW covariant
+//     derivations count as two units alongside the ten Section-6 units).
+func TestDerivationInventory(t *testing.T) {
+	f := ms.Build()
+	if len(f.Derivs) != 13 {
+		t.Fatalf("Derivs holds %d appends, want 13", len(f.Derivs))
+	}
+	all := append(append([]artifact.ArtifactRef{}, f.Derivs...), f.FRWDerivRef)
+	seen := map[artifact.ArtifactRef]bool{}
+	for i, dref := range all {
+		fam, payload, err := f.Store.Lookup(dref)
+		if err != nil {
+			t.Fatalf("evidence %d unresolvable: %v", i, err)
+		}
+		if fam != physmath.FamilyDerivation {
+			t.Fatalf("evidence %d is %s/%s, not derivation/1", i, fam.Namespace, fam.ArtifactType)
+		}
+		if seen[dref] {
+			t.Fatalf("evidence %d duplicates an earlier derivation artifact", i)
+		}
+		seen[dref] = true
+		d, err := physmath.DecodeDerivation(payload)
+		if err != nil {
+			t.Fatalf("evidence %d undecodable: %v", i, err)
+		}
+		if err := physmath.Replay(f.Store, d, nil); err != nil {
+			t.Fatalf("evidence %d does not replay: %v", i, err)
+		}
+	}
+	if len(seen) != 14 {
+		t.Fatalf("distinct replayed derivation artifacts = %d, want 14", len(seen))
+	}
+	// The two FRW covariant derivations must be among the replayed
+	// evidence; otherwise the pitch's units 11-12 are unsubstantiated.
+	if !seen[f.FRWConnDerivRef] {
+		t.Fatal("FRW connection derivation missing from replayed evidence")
+	}
+	if !seen[f.FRWCovDerivRef] {
+		t.Fatal("FRW covariant-evaluation derivation missing from replayed evidence")
+	}
+	if err := f.Verify(); err != nil {
+		t.Fatalf("valid fixture rejected: %v", err)
+	}
+}
+
 // TestWDWSecondPhiDerivative: ∂²_φR = 2 for R = a²+φ²+1 (paper 74, first piece).
 func TestWDWSecondPhiDerivative(t *testing.T) {
 	f := ms.Build()
