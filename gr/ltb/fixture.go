@@ -1,0 +1,616 @@
+package ltb
+
+import (
+	"fmt"
+
+	"github.com/PithomLabs/phys-artifact"
+	"github.com/PithomLabs/phys-lib/gr"
+	"github.com/PithomLabs/phys-math"
+)
+
+// Fixture holds every minted artifact of the ZEH/LTB reference slice.
+type Fixture struct {
+	Store physmath.Store
+
+	FrameworkRef artifact.ArtifactRef
+	Assumptions  map[string]artifact.ArtifactRef
+
+	// Radial coordinate identity: bound symbol r (PID 0) with its
+	// declaring function. All r-expressions below share this identity;
+	// differentiation targets it through the declaration (Lesson 17).
+	RFnRef artifact.ArtifactRef // function/1 declaring (r)
+
+	// Executed fragment: M(r) = r^3/2 in the fixed radial gauge.
+	MRef         artifact.ArtifactRef // expression/1 M(r)
+	MPrimeRef    artifact.ArtifactRef // expression/1 dM/dr output
+	MPrimeHand   artifact.ArtifactRef // expression/1 hand-built 3r^2/2 golden
+	MPrimeRelRef artifact.ArtifactRef // relation/1 EQ(output, hand golden)
+	MathThmRef   artifact.ArtifactRef // theorem/1 binding output to golden
+
+	// Framework wrappers citing the owning assumptions.
+	EqGauge    gr.PhysicalEquation
+	EqGaugeRef artifact.ArtifactRef // phys-gr equation/1 (gauge)
+	PhysThm    gr.PhysicalTheorem
+	PhysThmRef artifact.ArtifactRef // phys-gr theorem/1 (executed fragment)
+	ThetaRef   artifact.ArtifactRef // expression/1 EdS theta construction
+	ThetaCanon artifact.ArtifactRef // expression/1 CANON output (replayed)
+	SigmaRef   artifact.ArtifactRef // expression/1 sigma construction (represented only)
+	DACoeffs   []artifact.ArtifactRef
+	// VertexCoeffs maps series order -> stored EdS coefficient artifact
+	// (expression/1 rational): 1->z1=1, 2->z2=3/4, 3->z3=1/2, where
+	// z(r)=Z0(r)-1 with Z0(r)=(1-r/2)^-2. EdS baseline values only;
+	// not the general candidate recursion.
+	VertexCoeffs map[int]artifact.ArtifactRef
+	ConeRefs     map[string]artifact.ArtifactRef
+
+	// Derivs is the complete evidence inventory: every derivation/1
+	// artifact the fixture claims as executed evidence. Verify replays
+	// each one; the manifest's coverage claim is tested against this set.
+	Derivs []artifact.ArtifactRef
+}
+
+// assumption seeds the LTB reference assumptions. ConditionRefs stay empty:
+// these are framework regularity/model/convention adoptions, not PhysMath
+// predicates (gr seed.go pattern). Assumption linkage is enforced by
+// citing these refs from the equation/theorem artifacts and resolving
+// them in Verify.
+func assumption(id, category, description string) gr.PhysicalAssumption {
+	return gr.PhysicalAssumption{
+		AssumptionID: id,
+		Category:     category,
+		Description:  description,
+	}
+}
+
+// Build constructs the fixture. It panics on programmer error; crafted
+// validation failures surface through Verify and the protocol tests.
+func Build() *Fixture {
+	s := physmath.NewMemStore()
+	f := &Fixture{Store: s, Assumptions: map[string]artifact.ArtifactRef{},
+		VertexCoeffs: map[int]artifact.ArtifactRef{}, ConeRefs: map[string]artifact.ArtifactRef{}}
+
+	fw, err := gr.NewFramework("general_relativity")
+	if err != nil {
+		panic(err)
+	}
+	if f.FrameworkRef, err = fw.Mint(s); err != nil {
+		panic(err)
+	}
+
+	seeds := []gr.PhysicalAssumption{
+		assumption("ltb_gauge", gr.CategoryConvention,
+			"Radial gauge fixed exactly as M(r)=r^3/2, not r^(3/2); removes relabeling freedom."),
+		assumption("ltb_regime", gr.CategoryConvention,
+			"Late-time classical GR, irrotational pressureless dust, Lambda=0, units c=G=H0=1."),
+		assumption("ltb_observer", gr.CategoryModel,
+			"Central observer with comoving synchronous dust foliation; all beams through the vertex are radial."),
+		assumption("ltb_regularity", gr.CategoryRegularity,
+			"Regular center, 1+2E>0, R'>0, rho>0, no shell crossings over the stated domain and interval."),
+		assumption("ltb_domain", gr.CategoryModel,
+			"Spherical comoving domain with fixed physical boundary R(t0,rD)=Rphys; rD recomputed per model."),
+		assumption("ltb_target", gr.CategoryModel,
+			"Target D_A*(z)=2[1-(1+z)^-1/2]/(1+z) on 0<=z<=1; area radius R=D_A on the central cone (not rescaled G)."),
+		assumption("ltb_central_norm", gr.CategoryConvention,
+			"Central normalization R'(t0,0)=1 with shared observer event t0=2/3; load-bearing constitution, not derived."),
+	}
+	for _, a := range seeds {
+		if err := a.Validate(); err != nil {
+			panic(err)
+		}
+		ref, err := a.Mint(s)
+		if err != nil {
+			panic(err)
+		}
+		f.Assumptions[a.AssumptionID] = ref
+	}
+
+	// Bound radial coordinate with explicit display vocabulary.
+	pid := physmath.DeriveParameterID(0)
+	r := physmath.NewBoundSymbol("r", pid)
+	mBody := physmath.Mul(physmath.MustRational(1, 2),
+		physmath.Pow(r, physmath.MustRational(3, 1)))
+	f.RFnRef = mintFn(s, []physmath.ParameterID{pid}, []string{"r"}, mBody)
+	f.MRef, err = refOf(s, f.RFnRef)
+	if err != nil {
+		panic(err)
+	}
+
+	// Executed fragment D1: dM/dr via DIFFERENTIATE-001 with replayed
+	// evidence. Hand golden: 3r^2/2 (power rule from the binomial-free
+	// monomial; derived by hand in README, not generated by the rule).
+	diffOut, diffDeriv := diffReplay(s, f.MRef, f.RFnRef, pid, 1, nil)
+	f.MPrimeRef = diffOut
+	f.Derivs = append(f.Derivs, diffDeriv)
+	hand := physmath.Mul(physmath.MustRational(3, 2),
+		physmath.Pow(physmath.NewBoundSymbol("r", pid), physmath.MustRational(2, 1)))
+	if f.MPrimeHand, err = physmath.PutExpression(s, hand); err != nil {
+		panic(err)
+	}
+	relPayload, err := physmath.EncodeRelationBody(physmath.OpEQ,
+		mustResolve(s, f.MPrimeRef), hand)
+	if err != nil {
+		panic(err)
+	}
+	if f.MPrimeRelRef, err = s.Put(physmath.FamilyRelation, relPayload); err != nil {
+		panic(err)
+	}
+	th := physmath.Theorem{PremiseRefs: []artifact.ArtifactRef{f.MRef},
+		ConclusionRef: f.MPrimeRelRef, DerivationRef: diffDeriv}
+	if err := th.Validate(); err != nil {
+		panic(err)
+	}
+	thPayload, err := th.Encode()
+	if err != nil {
+		panic(err)
+	}
+	if f.MathThmRef, err = s.Put(physmath.FamilyTheorem, thPayload); err != nil {
+		panic(err)
+	}
+
+	// Framework equation: the gauge identity M=(1/2)r^3 as physmath
+	// equation/1 wrapped with the owning assumptions.
+	eqPayload := physmath.Equation{RelationRef: f.MPrimeRelRef}.Encode()
+	eqRef, err := s.Put(physmath.FamilyEquation, eqPayload)
+	if err != nil {
+		panic(err)
+	}
+	pe := gr.PhysicalEquation{EquationID: "ltb_mass_gauge_derivative",
+		FrameworkRef: f.FrameworkRef, EquationRef: eqRef,
+		AssumptionRefs: []artifact.ArtifactRef{
+			f.Assumptions["ltb_gauge"], f.Assumptions["ltb_regime"],
+		}}
+	if err := pe.Validate(); err != nil {
+		panic(err)
+	}
+	f.EqGauge = pe
+	if f.EqGaugeRef, err = pe.Mint(s); err != nil {
+		panic(err)
+	}
+	pt := gr.PhysicalTheorem{TheoremID: "ltb_executed_gauge_fragment",
+		FrameworkRef: f.FrameworkRef, MathematicalTheoremRef: f.MathThmRef,
+		AssumptionRefs: []artifact.ArtifactRef{
+			f.Assumptions["ltb_gauge"], f.Assumptions["ltb_regime"],
+		}}
+	if err := pt.Validate(); err != nil {
+		panic(err)
+	}
+	f.PhysThm = pt
+	if f.PhysThmRef, err = pt.Mint(s); err != nil {
+		panic(err)
+	}
+
+	// EdS homogeneity construction (conditional baseline): H is one
+	// shared ephemeral identity (homogeneity premise), theta = H+2H,
+	// sigma factor built from (H-H). Theta passes through CANON with
+	// replayed evidence; the vanishing of sigma and the averaging
+	// integral are REPRESENTED ONLY (see limitations).
+	h := physmath.NewEphemeralSymbol("H")
+	theta := physmath.Add(h, physmath.Mul(physmath.MustRational(2, 1), h))
+	if f.ThetaRef, err = physmath.PutExpression(s, theta); err != nil {
+		panic(err)
+	}
+	thetaCanon, thetaDeriv := canonReplay(s, f.ThetaRef, nil)
+	f.ThetaCanon = thetaCanon
+	f.Derivs = append(f.Derivs, thetaDeriv)
+	delta := physmath.Add(h, physmath.Neg(h))
+	sigma := physmath.Mul(physmath.MustRational(1, 3),
+		physmath.Pow(delta, physmath.MustRational(2, 1)))
+	if f.SigmaRef, err = physmath.PutExpression(s, sigma); err != nil {
+		panic(err)
+	}
+
+	// Hand-recorded D_A* series coefficients about z=0: 1, -7/4, 19/8.
+	// Derived by hand in README from the binomial series; the protocol
+	// test recomputes them mechanically from an independent starting
+	// point. Recording them here is a candidate golden, not a proof.
+	for _, c := range [][2]int64{{1, 1}, {-7, 4}, {19, 8}} {
+		ref, err := physmath.PutExpression(s, physmath.MustRational(c[0], c[1]))
+		if err != nil {
+			panic(err)
+		}
+		f.DACoeffs = append(f.DACoeffs, ref)
+	}
+
+	// EdS cone structured expressions (constructed, never executed):
+	// V0=r/u, Q0=1/u, Rc0=r*u^2, P0=u^2 with u=1-r/2. The identity
+	// 2*V0*Q0 == 3r^2/Rc0 - r^3*P0/Rc0^2 is checked in Go rational
+	// arithmetic by the protocol test (pointwise corroboration, not a
+	// symbolic proof by the engine).
+	u := physmath.Add(physmath.MustRational(1, 1),
+		physmath.Neg(physmath.Mul(physmath.MustRational(1, 2), r)))
+	put := func(e physmath.Expr) artifact.ArtifactRef {
+		ref, err := physmath.PutExpression(s, e)
+		if err != nil {
+			panic(err)
+		}
+		return ref
+	}
+	f.ConeRefs["u"] = put(u)
+	f.ConeRefs["V0"] = put(physmath.Mul(r,
+		physmath.Pow(u, physmath.MustRational(-1, 1))))
+	f.ConeRefs["Q0"] = put(physmath.Pow(u, physmath.MustRational(-1, 1)))
+	f.ConeRefs["Rc0"] = put(physmath.Mul(r,
+		physmath.Pow(u, physmath.MustRational(2, 1))))
+	f.ConeRefs["P0"] = put(physmath.Pow(u, physmath.MustRational(2, 1)))
+
+	// Stored EdS vertex-series coefficients, keyed by series order:
+	// z(r) = z1*r + z2*r^2 + z3*r^3 + ... with z1=1, z2=3/4, z3=1/2
+	// from Z0(r)=(1-r/2)^-2 (hand derivation in README; the protocol
+	// test recomputes mechanically). Baseline values only.
+	for order, c := range map[int][2]int64{1: {1, 1}, 2: {3, 4}, 3: {1, 2}} {
+		ref, err := physmath.PutExpression(s, physmath.MustRational(c[0], c[1]))
+		if err != nil {
+			panic(err)
+		}
+		f.VertexCoeffs[order] = ref
+	}
+
+	return f
+}
+
+// Verify replays every derivation in the evidence inventory, binds the
+// executed output to its hand golden, gates the theorem conclusion, and
+// resolves the framework assumption linkage. It establishes replay and
+// linkage only; it does not prove any conjecture and enforces no
+// scientific status (that lives in manifest metadata).
+func (f *Fixture) Verify() error {
+	for i, dref := range f.Derivs {
+		if err := replayDerivation(f.Store, i, dref); err != nil {
+			return err
+		}
+	}
+	if err := checkMPrimeGolden(f.Store, f.MPrimeRef, f.MPrimeHand, f.MPrimeRelRef); err != nil {
+		return err
+	}
+	thFam, _, err := f.Store.Lookup(f.MathThmRef)
+	if err != nil {
+		return fmt.Errorf("ltb: math theorem unresolvable: %w", err)
+	}
+	if thFam != physmath.FamilyTheorem {
+		return fmt.Errorf("ltb: math theorem wrong family")
+	}
+	th := decodeTheorem(f.Store, f.MathThmRef)
+	if err := physmath.CheckTheoremConclusion(f.Store, th, f.MPrimeRef, f.MPrimeHand); err != nil {
+		return fmt.Errorf("ltb: theorem conclusion gate: %w", err)
+	}
+	if err := checkTargets(f.Store, f.PhysThm.TargetChecks()); err != nil {
+		return err
+	}
+	if err := checkTargets(f.Store, f.EqGauge.TargetChecks()); err != nil {
+		return err
+	}
+	// The executed fragment contract names its required assumptions
+	// exactly: gauge and regime, no more, no fewer. Family membership
+	// alone would admit a same-family substitution (e.g. ltb_target
+	// for ltb_gauge); ref equality rejects it.
+	required := []artifact.ArtifactRef{
+		f.Assumptions["ltb_gauge"], f.Assumptions["ltb_regime"],
+	}
+	if err := checkRequiredAssumptions(f.PhysThm.AssumptionRefs, required, "PhysThm"); err != nil {
+		return err
+	}
+	if err := checkRequiredAssumptions(f.EqGauge.AssumptionRefs, required, "EqGauge"); err != nil {
+		return err
+	}
+	// In-memory-vs-stored correspondence: the validated structs must
+	// encode to exactly the stored payloads, so Verify cannot silently
+	// validate one object while minting another.
+	if err := checkStoredCorrespondence(f.Store, f.EqGaugeRef, f.EqGauge); err != nil {
+		return err
+	}
+	if err := checkStoredCorrespondence(f.Store, f.PhysThmRef, f.PhysThm); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkRequiredAssumptions enforces the exact required assumption set
+// (order-independent): missing, extra, or substituted refs fail.
+func checkRequiredAssumptions(got, required []artifact.ArtifactRef, what string) error {
+	if len(got) != len(required) {
+		return fmt.Errorf("ltb: %s cites %d assumptions, want %d",
+			what, len(got), len(required))
+	}
+	need := map[artifact.ArtifactRef]bool{}
+	for _, r := range required {
+		need[r] = true
+	}
+	for _, r := range got {
+		if !need[r] {
+			return fmt.Errorf("ltb: %s cites unexpected assumption", what)
+		}
+		delete(need, r)
+	}
+	if len(need) != 0 {
+		return fmt.Errorf("ltb: %s misses a required assumption", what)
+	}
+	return nil
+}
+
+// checkStoredCorrespondence requires obj.Encode() to equal the stored
+// payload, closing the in-memory-vs-stored gap with existing APIs.
+func checkStoredCorrespondence(s physmath.Store, ref artifact.ArtifactRef, obj interface {
+	Encode() ([]byte, error)
+}) error {
+	_, payload, err := s.Lookup(ref)
+	if err != nil {
+		return fmt.Errorf("ltb: correspondence target unresolvable: %w", err)
+	}
+	enc, err := obj.Encode()
+	if err != nil {
+		return fmt.Errorf("ltb: correspondence object unencodable: %w", err)
+	}
+	if string(enc) != string(payload) {
+		return fmt.Errorf("ltb: in-memory object differs from stored artifact")
+	}
+	return nil
+}
+
+// checkTargets resolves every TargetCheck ref and enforces its family.
+// Dropping or substituting an assumption breaks this gate.
+func checkTargets(s physmath.Store, checks []physmath.TargetCheck) error {
+	for _, c := range checks {
+		fam, _, err := s.Lookup(c.Ref)
+		if err != nil {
+			return fmt.Errorf("ltb: %s unresolvable: %w", c.Field, err)
+		}
+		ok := false
+		for _, a := range c.Allowed {
+			if fam == a {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return fmt.Errorf("ltb: %s has family %s/%s, want %v",
+				c.Field, fam.Namespace, fam.ArtifactType, c.Allowed)
+		}
+	}
+	return nil
+}
+
+// checkMPrimeBinding verifies the stored relation binds the actual
+// derivative output (left, byte-identical) to the hand golden (right,
+// drift-checked). Binding only: mathematical agreement between the
+// engine's uncollected output form and 3r^2/2 is corroborated
+// pointwise by the protocol test's independent rational evaluator,
+// not by canonical equality — the engine promises no distributivity
+// or term collection (Lesson 3).
+func checkMPrimeGolden(s physmath.Store, outRef, handRef, relRef artifact.ArtifactRef) error {
+	outFam, outPayload, err := s.Lookup(outRef)
+	if err != nil {
+		return fmt.Errorf("ltb: M' unresolvable: %w", err)
+	}
+	if outFam != physmath.FamilyExpression {
+		return fmt.Errorf("ltb: M' is not expression/1")
+	}
+	if _, err := physmath.DecodeExpr(artifact.NewDecoder(outPayload)); err != nil {
+		return fmt.Errorf("ltb: M' undecodable: %w", err)
+	}
+	handFam, handPayload, err := s.Lookup(handRef)
+	if err != nil {
+		return fmt.Errorf("ltb: hand golden unresolvable: %w", err)
+	}
+	if handFam != physmath.FamilyExpression {
+		return fmt.Errorf("ltb: hand golden is not expression/1")
+	}
+	relFam, relPayload, err := s.Lookup(relRef)
+	if err != nil {
+		return fmt.Errorf("ltb: M' relation unresolvable: %w", err)
+	}
+	if relFam != physmath.FamilyRelation {
+		return fmt.Errorf("ltb: M' relation is not relation/1")
+	}
+	rd := artifact.NewDecoder(relPayload)
+	opStr, err := rd.String()
+	if err != nil {
+		return fmt.Errorf("ltb: M' relation missing operator: %w", err)
+	}
+	if opStr != string(physmath.OpEQ) {
+		return fmt.Errorf("ltb: M' relation is not an equality")
+	}
+	relLeft, err := physmath.DecodeExpr(rd)
+	if err != nil {
+		return fmt.Errorf("ltb: M' relation left undecodable: %w", err)
+	}
+	relRight, err := physmath.DecodeExpr(rd)
+	if err != nil {
+		return fmt.Errorf("ltb: M' relation right undecodable: %w", err)
+	}
+	if !rd.Exhausted() {
+		return fmt.Errorf("ltb: trailing bytes in M' relation")
+	}
+	lb, err := relLeft.Encode()
+	if err != nil {
+		return fmt.Errorf("ltb: M' relation left unencodable: %w", err)
+	}
+	if string(lb) != string(outPayload) {
+		return fmt.Errorf("ltb: M' relation left side is not the stored output")
+	}
+	rb, err := relRight.Encode()
+	if err != nil {
+		return fmt.Errorf("ltb: M' relation right unencodable: %w", err)
+	}
+	if string(rb) != string(handPayload) {
+		return fmt.Errorf("ltb: M' relation right side drifted from the stored hand golden")
+	}
+	return nil
+}
+
+func replayDerivation(s physmath.Store, i int, dref artifact.ArtifactRef) error {
+	_, payload, err := s.Lookup(dref)
+	if err != nil {
+		return fmt.Errorf("ltb: evidence derivation %d unresolvable: %w", i, err)
+	}
+	d, err := physmath.DecodeDerivation(payload)
+	if err != nil {
+		return fmt.Errorf("ltb: evidence derivation %d undecodable: %w", i, err)
+	}
+	if err := physmath.Replay(s, d, nil); err != nil {
+		return fmt.Errorf("ltb: evidence derivation %d does not replay: %w", i, err)
+	}
+	return nil
+}
+
+func mustResolve(s physmath.Store, ref artifact.ArtifactRef) physmath.Expr {
+	fam, payload, err := s.Lookup(ref)
+	if err != nil {
+		panic(err)
+	}
+	if fam != physmath.FamilyExpression {
+		panic("ltb: not expression/1")
+	}
+	e, err := physmath.DecodeExpr(artifact.NewDecoder(payload))
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
+func mintFn(s physmath.Store, ids []physmath.ParameterID, names []string, body physmath.Expr) artifact.ArtifactRef {
+	bodyRef, err := physmath.PutExpression(s, body)
+	if err != nil {
+		panic(err)
+	}
+	fn := physmath.Function{ParameterIDs: ids, ParamNames: names, BodyRef: bodyRef}
+	if err := physmath.ValidateFunctionBody(fn, body); err != nil {
+		panic(err)
+	}
+	payload, err := fn.Encode()
+	if err != nil {
+		panic(err)
+	}
+	ref, err := s.Put(physmath.FamilyFunction, payload)
+	if err != nil {
+		panic(err)
+	}
+	return ref
+}
+
+func refOf(s physmath.Store, fnRef artifact.ArtifactRef) (artifact.ArtifactRef, error) {
+	fam, payload, err := s.Lookup(fnRef)
+	if err != nil {
+		return artifact.ArtifactRef{}, err
+	}
+	if fam != physmath.FamilyFunction {
+		return artifact.ArtifactRef{}, fmt.Errorf("ltb: not function/1")
+	}
+	fn, err := physmath.DecodeFunction(artifact.NewDecoder(payload))
+	if err != nil {
+		return artifact.ArtifactRef{}, err
+	}
+	return fn.BodyRef, nil
+}
+
+func diffParams(fn artifact.ArtifactRef, pid physmath.ParameterID, order uint32) []byte {
+	return append(physmath.BoundParameterRef{DeclaringArtifactRef: fn, ParameterID: pid}.Encode(),
+		artifact.EncodeUInt32(order)...)
+}
+
+// diffReplay runs DIFFERENTIATE-001 with replay evidence, returning the
+// output ref plus a minted derivation/1 ref for the evidence inventory.
+func diffReplay(s physmath.Store, in, fn artifact.ArtifactRef, pid physmath.ParameterID, order uint32, conds []artifact.ArtifactRef) (artifact.ArtifactRef, artifact.ArtifactRef) {
+	res, err := physmath.Apply(s, physmath.Invocation{
+		ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleDifferentiate,
+		InputRefs: []artifact.ArtifactRef{in, fn}, ConditionRefs: conds,
+		Parameters: diffParams(fn, pid, order),
+	})
+	if err != nil {
+		panic(err)
+	}
+	d := physmath.Derivation{
+		PremiseRefs: []artifact.ArtifactRef{in, fn},
+		Steps: []physmath.DerivationStep{{
+			Ordinal: 0, ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleDifferentiate,
+			InputRefs: []artifact.ArtifactRef{in, fn}, OutputRef: res.OutputRef,
+			ConditionRefs: res.ConditionRefs, Parameters: diffParams(fn, pid, order),
+		}},
+		ResultRefs: []artifact.ArtifactRef{res.OutputRef},
+	}
+	if err := physmath.Replay(s, d, nil); err != nil {
+		panic(err)
+	}
+	return res.OutputRef, mustMintDerivation(s, d)
+}
+
+// canonReplay runs EXPR-CANON-001 with replay evidence.
+func canonReplay(s physmath.Store, in artifact.ArtifactRef, conds []artifact.ArtifactRef) (artifact.ArtifactRef, artifact.ArtifactRef) {
+	res, err := physmath.Apply(s, physmath.Invocation{
+		ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleExprCanon,
+		InputRefs: []artifact.ArtifactRef{in}, ConditionRefs: conds,
+	})
+	if err != nil {
+		panic(err)
+	}
+	d := physmath.Derivation{
+		PremiseRefs: []artifact.ArtifactRef{in},
+		Steps: []physmath.DerivationStep{{
+			Ordinal: 0, ProducerNamespace: physmath.NamespacePhysMath, RuleID: physmath.RuleExprCanon,
+			InputRefs: []artifact.ArtifactRef{in}, OutputRef: res.OutputRef,
+			ConditionRefs: res.ConditionRefs,
+		}},
+		ResultRefs: []artifact.ArtifactRef{res.OutputRef},
+	}
+	if err := physmath.Replay(s, d, nil); err != nil {
+		panic(err)
+	}
+	return res.OutputRef, mustMintDerivation(s, d)
+}
+
+func mustMintDerivation(s physmath.Store, d physmath.Derivation) artifact.ArtifactRef {
+	raw, err := d.Encode()
+	if err != nil {
+		panic(err)
+	}
+	ref, err := s.Put(physmath.FamilyDerivation, raw)
+	if err != nil {
+		panic(err)
+	}
+	return ref
+}
+
+// decodeTheorem decodes the stored theorem payload in canonical field
+// order (premises SET, conclusion, assumptions SET, derivation).
+func decodeTheorem(s physmath.Store, ref artifact.ArtifactRef) physmath.Theorem {
+	fam, payload, err := s.Lookup(ref)
+	if err != nil {
+		panic(err)
+	}
+	if fam != physmath.FamilyTheorem {
+		panic("ltb: not a theorem")
+	}
+	d := artifact.NewDecoder(payload)
+	preCount, err := d.SequenceCount()
+	if err != nil {
+		panic(err)
+	}
+	var pre []artifact.ArtifactRef
+	for i := 0; i < preCount; i++ {
+		r, err := artifact.DecodeArtifactRef(d)
+		if err != nil {
+			panic(err)
+		}
+		pre = append(pre, r)
+	}
+	conc, err := artifact.DecodeArtifactRef(d)
+	if err != nil {
+		panic(err)
+	}
+	asmCount, err := d.SequenceCount()
+	if err != nil {
+		panic(err)
+	}
+	var asm []artifact.ArtifactRef
+	for i := 0; i < asmCount; i++ {
+		r, err := artifact.DecodeArtifactRef(d)
+		if err != nil {
+			panic(err)
+		}
+		asm = append(asm, r)
+	}
+	drv, err := artifact.DecodeArtifactRef(d)
+	if err != nil {
+		panic(err)
+	}
+	return physmath.Theorem{PremiseRefs: pre, ConclusionRef: conc, AssumptionRefs: asm, DerivationRef: drv}
+}
