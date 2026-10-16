@@ -1,0 +1,59 @@
+{
+  "schema_version": "1",
+  "artifact_type": "derivation",
+  "derivation_id": "ltb_zeh_reference",
+  "framework_id": "general_relativity",
+  "name": "ZEH/LTB Research-Workflow Reference (EdS baseline fragment)",
+  "entry_points": {
+    "primary": "ltb.Build",
+    "secondary": "ltb.Verify"
+  },
+  "provenance_note": "Research lead plan2_z.md describes its own artifacts as unexecuted with no canonical workspace spec available; every series coefficient reused here was re-derived by hand (see README) before use as a golden.",
+  "regime": "late-time classical GR, irrotational pressureless dust, Lambda=0, central observer, comoving synchronous foliation, units c=G=H0=1",
+  "conventions": {
+    "radial_gauge": "M(r)=r^3/2 exactly, not r^(3/2)",
+    "central_normalization": "R'(t0,0)=1 with shared observer event t0=2/3 (load-bearing constitution, not derived)",
+    "distance_reading": "area radius R=D_A on the central light cone; rescaled G(Z) notation kept distinct"
+  },
+  "target": "D_A*(z)=2[1-(1+z)^-1/2]/(1+z), 0<=z<=1",
+  "domain": "spherical comoving domain, physical boundary R(t0,rD)=Rphys recomputed per model",
+  "claims": [
+    {"id": "ZEH-Q-01", "title": "LTB distance-inversion freedom", "status": "literature-claim-requiring-verification", "evidence_refs": []},
+    {"id": "ZEH-Q-02", "title": "exact iso-distance construction", "status": "candidate-construction-incomplete", "evidence_refs": []},
+    {"id": "ZEH-Q-03", "title": "backreaction non-identifiability theorem", "status": "open-conjecture", "evidence_refs": []},
+    {"id": "ZEH-Q-04", "title": "simultaneous-bang restriction", "status": "deferred", "evidence_refs": []}
+  ],
+  "obligations": [
+    {"id": "O1", "statement": "exact target-distance matching on 0<=z<=1", "blocks": ["ZEH-Q-02", "ZEH-Q-03"], "evidence_required": "regular cone solution reproducing D_A* exactly"},
+    {"id": "O2", "statement": "vertex regularity and analytic existence at the singular cone vertex", "blocks": ["ZEH-Q-02"], "evidence_required": "majorant/CKS well-posedness for the vertex-singular ODE"},
+    {"id": "O3", "statement": "admissibility and valid off-cone extension of each cone solution", "blocks": ["ZEH-Q-02", "ZEH-Q-03"], "evidence_required": "1+2E>0, R'>0, rho>0, no shell crossing, t_B from shell-age relation"},
+    {"id": "O4", "statement": "backreaction response and a valid nonzero distinguishing result", "blocks": ["ZEH-Q-03"], "evidence_required": "Q_2[h]!=0 for an admissible profile under the exact constraint"},
+    {"id": "O5", "statement": "perturbative remainder control for the epsilon route", "blocks": ["ZEH-Q-03"], "evidence_required": "O(epsilon^3) bound guaranteeing sign for small epsilon"},
+    {"id": "O6", "statement": "fixed-physical-boundary shift accounted for in Q_D", "blocks": ["ZEH-Q-03"], "evidence_required": "r_D(u) variation included at the relevant order"},
+    {"id": "O7", "statement": "prior-art and novelty audit", "blocks": ["ZEH-Q-01", "ZEH-Q-03"], "evidence_required": "targeted literature comparison of the Q_D-specific claim"}
+  ],
+  "assumptions": [
+    "ltb_gauge",
+    "ltb_regime",
+    "ltb_observer",
+    "ltb_regularity",
+    "ltb_domain",
+    "ltb_target",
+    "ltb_central_norm"
+  ],
+  "verification": {
+    "executed": "DIFFERENTIATE-001 dM/dr with replayed derivation; EXPR-CANON-001 on EdS theta with replayed derivation; theorem conclusion gate binding output to hand golden; all-r degree-coefficient structural check of dM/dr (arbitrary-precision degrees) plus finite-sample Go rational corroboration of the stored cone expressions, D_A* coefficients, and stored EdS vertex coefficients z1,z2,z3; Verify enforces the exact required assumption set and in-memory-vs-stored correspondence",
+    "represented_only": "spatial averaging integral and volume measure; sigma vanishing beyond structure; off-cone extension; Q_2 functional; claim statuses"
+  },
+  "limitations": [
+    {"id": "averaging_unexecuted", "statement": "No spatial-integration primitive was added (growth gate); the averaging integral is represented, not executed. Expression checks do not prove Q_D=0 by themselves."},
+    {"id": "status_is_metadata", "statement": "Claim statuses live in this manifest, not in any artifact schema; Verify enforces evidence linkage, not epistemic status. Unsupported promotion is rejected by metadata checks only to that extent."},
+    {"id": "candidate_goldens", "statement": "Series coefficients are hand-derived candidate goldens with independent mechanical recomputation in tests, not engine-proved theorems."},
+    {"id": "no_pair_constructed", "statement": "No admissible model pair with distinct Q_D is constructed; ZEH-Q-03 remains open with no theorem artifact."},
+    {"id": "no_empirical_claim", "statement": "No observational or empirical consequences are represented or claimed."}
+  ],
+  "literature": [
+    {"cite": "Mustapha-Hellaby-Ellis 1997", "establishes": "background LTB distance-inversion freedom (applicability requires verification)", "status": "requires-verification"},
+    {"cite": "Buchert 2000", "establishes": "Buchert averaging formalism and Q_D definition (background)", "status": "requires-verification"}
+  ]
+}
