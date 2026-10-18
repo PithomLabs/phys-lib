@@ -15,6 +15,12 @@
     "scope_note": "Section 6 eqs 67-78; WDW operator, guidance RHS, rhoQ/pQ, TQ assembly, FRW volume"
   },
   "regime": "homogeneous isotropic minisuperspace toy model; symmetry-reduced quantization, flat spatial chart",
+  "coordinates": [
+    "x",
+    "y",
+    "z"
+  ],
+  "anomalies": [],
   "conventions": {
     "metric_signature": "+---",
     "operator_ordering": "Laplace-Beltrami",
@@ -112,116 +118,10 @@
     {
       "id": "covariant_scope",
       "statement": "Covariant evaluation is executed and replay-verified solely for the flat-FRW-chart covector fragment (vanishing connection, Kronecker goldens, covariant_evaluation/1 certificate checked by Fixture.Verify). General connections, curvature, and functional derivatives remain unsupported."
-    }
-  ],
-  "source_mapping": [
-    {
-      "source_eq": "76",
-      "source_quantity": "rho_Q",
-      "meaning": "quantum energy density",
-      "defining_relation": "rhoQ = -1/2a^6|psi|·∂²|psi| + κ̄²/2a^6|psi|·(a∂_a)²|psi|",
-      "fixture_ref": "RhoQRef",
-      "dependencies": [
-        "Amplitude",
-        "WSimpRef",
-        "aNonzero",
-        "ampNonzero",
-        "KappaFunRef"
-      ]
     },
     {
-      "source_eq": "76-derived",
-      "source_quantity": "Q",
-      "meaning": "quantum potential density",
-      "defining_relation": "Q = a^3·rhoQ",
-      "fixture_ref": "QRef",
-      "dependencies": [
-        "RhoQRef"
-      ]
-    },
-    {
-      "source_eq": "77",
-      "source_quantity": "p_Q",
-      "meaning": "quantum pressure",
-      "defining_relation": "pQ = -1/3a^2·∂_aQ",
-      "fixture_ref": "PQRef",
-      "dependencies": [
-        "QRef",
-        "aNonzero",
-        "ampNonzero",
-        "KappaFunRef"
-      ]
-    },
-    {
-      "source_eq": "78",
-      "source_quantity": "T_Q^00",
-      "meaning": "quantum energy-momentum 00-component, comoving",
-      "defining_relation": "TQ00 = (rhoQ+pQ)·U^0·U^0 - pQ·g^00",
-      "fixture_ref": "TQ00Ref",
-      "dependencies": [
-        "RhoQRef",
-        "PQRef",
-        "U0Ref"
-      ]
-    },
-    {
-      "source_eq": "74",
-      "source_quantity": "WDW operator action",
-      "meaning": "minisuperspace constraint operator applied to test R",
-      "defining_relation": "ĤR residual (k=0, Λ=0)",
-      "fixture_ref": "Residual",
-      "dependencies": [
-        "RRef",
-        "aNonzero"
-      ]
-    },
-    {
-      "source_eq": "75",
-      "source_quantity": "guidance RHS",
-      "meaning": "phase partials",
-      "defining_relation": "∂_φS, ∂_aS executed; GuidePhiRef=N/a³·∂S and GuideARef=-κ̄²·N/a·∂S assembled (LHS time evolution not derived)",
-      "fixture_ref": "DPhiSRef, DaSRef, GuidePhiRef, GuideARef",
-      "dependencies": [
-        "SRef"
-      ]
-    },
-    {
-      "source_eq": "67",
-      "source_quantity": "FRW spatial volume",
-      "meaning": "determinant and a³-gated factor, flat chart",
-      "defining_relation": "det diag(a²,a²,a²), μ=a³ under a>0",
-      "fixture_ref": "FRWVolRef",
-      "dependencies": [
-        "FRWMetricRef",
-        "FRWDerivRef",
-        "aPos"
-      ]
-    },
-    {
-      "source_eq": "67-cov",
-      "source_quantity": "covariant derivative",
-      "meaning": "chart-bound covariant differentiation of a test covector in the FRW fragment",
-      "defining_relation": "∇_μω_ν with vanishing Γ; Kronecker goldens",
-      "fixture_ref": "FRWCovEvalRef",
-      "dependencies": [
-        "FRWCovMetricRef",
-        "FRWChartRef",
-        "FRWConnRef",
-        "FRWCovFieldRef",
-        "FRWCovDerivRef"
-      ]
-    },
-    {
-      "source_eq": "67-conn",
-      "source_quantity": "Levi-Civita connection",
-      "meaning": "metric-derived connection of the fragment metric",
-      "defining_relation": "Γ from general inverse + partials; coefficients verified zero",
-      "fixture_ref": "FRWConnRef",
-      "dependencies": [
-        "FRWCovMetricRef",
-        "FRWChartRef",
-        "FRWConnDerivRef"
-      ]
+      "id": "source_mapping_structural_only",
+      "statement": "The intended paper-equation-to-fixture correspondence is recorded in the sidecar source_mapping.json, not in this manifest (the GR manifest schema has no field for it; see PROTOCOL_GAPS.md). It is checked for structure and reference integrity only: every fixture_ref resolves to a real fixture field, condition, or symbol, and every source_eq lies in the declared Section 6 scope. No test verifies that any mapping is scientifically correct against the paper's text; mechanical consistency is not source-verified scientific correspondence."
     }
   ]
 }

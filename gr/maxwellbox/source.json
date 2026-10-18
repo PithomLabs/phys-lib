@@ -1,0 +1,8 @@
+{
+  "source": {
+    "arxiv_id": "2101.11923",
+    "pdf_sha256_hex": "4cd872322ef0358a50c10a70281e76adcfaf66826b1707f757a8f883a563c598",
+    "representation": "phys-trace rev2 (000f6ead…5280): K1/D1 + K2/D2",
+    "scope_note": "D1 s1-s4 represented, s5-s6 replayed; K2 scalar deferred to a later stress test"
+  }
+}

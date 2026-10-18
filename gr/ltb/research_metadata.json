@@ -1,0 +1,104 @@
+{
+  "provenance_note": "Research lead plan2_z.md describes its own artifacts as unexecuted with no canonical workspace spec available; every series coefficient reused here was re-derived by hand (see README) before use as a golden.",
+  "target": "D_A*(z)=2[1-(1+z)^-1/2]/(1+z), 0<=z<=1",
+  "domain": "spherical comoving domain, physical boundary R(t0,rD)=Rphys recomputed per model",
+  "claims": [
+    {
+      "id": "ZEH-Q-01",
+      "title": "LTB distance-inversion freedom",
+      "status": "literature-claim-requiring-verification",
+      "evidence_refs": []
+    },
+    {
+      "id": "ZEH-Q-02",
+      "title": "exact iso-distance construction",
+      "status": "candidate-construction-incomplete",
+      "evidence_refs": []
+    },
+    {
+      "id": "ZEH-Q-03",
+      "title": "backreaction non-identifiability theorem",
+      "status": "open-conjecture",
+      "evidence_refs": []
+    },
+    {
+      "id": "ZEH-Q-04",
+      "title": "simultaneous-bang restriction",
+      "status": "deferred",
+      "evidence_refs": []
+    }
+  ],
+  "obligations": [
+    {
+      "id": "O1",
+      "statement": "exact target-distance matching on 0<=z<=1",
+      "blocks": [
+        "ZEH-Q-02",
+        "ZEH-Q-03"
+      ],
+      "evidence_required": "regular cone solution reproducing D_A* exactly"
+    },
+    {
+      "id": "O2",
+      "statement": "vertex regularity and analytic existence at the singular cone vertex",
+      "blocks": [
+        "ZEH-Q-02"
+      ],
+      "evidence_required": "majorant/CKS well-posedness for the vertex-singular ODE"
+    },
+    {
+      "id": "O3",
+      "statement": "admissibility and valid off-cone extension of each cone solution",
+      "blocks": [
+        "ZEH-Q-02",
+        "ZEH-Q-03"
+      ],
+      "evidence_required": "1+2E>0, R'>0, rho>0, no shell crossing, t_B from shell-age relation"
+    },
+    {
+      "id": "O4",
+      "statement": "backreaction response and a valid nonzero distinguishing result",
+      "blocks": [
+        "ZEH-Q-03"
+      ],
+      "evidence_required": "Q_2[h]!=0 for an admissible profile under the exact constraint"
+    },
+    {
+      "id": "O5",
+      "statement": "perturbative remainder control for the epsilon route",
+      "blocks": [
+        "ZEH-Q-03"
+      ],
+      "evidence_required": "O(epsilon^3) bound guaranteeing sign for small epsilon"
+    },
+    {
+      "id": "O6",
+      "statement": "fixed-physical-boundary shift accounted for in Q_D",
+      "blocks": [
+        "ZEH-Q-03"
+      ],
+      "evidence_required": "r_D(u) variation included at the relevant order"
+    },
+    {
+      "id": "O7",
+      "statement": "prior-art and novelty audit",
+      "blocks": [
+        "ZEH-Q-01",
+        "ZEH-Q-03"
+      ],
+      "evidence_required": "targeted literature comparison of the Q_D-specific claim"
+    }
+  ],
+  "literature": [
+    {
+      "cite": "Mustapha-Hellaby-Ellis 1997",
+      "establishes": "background LTB distance-inversion freedom (applicability requires verification)",
+      "status": "requires-verification"
+    },
+    {
+      "cite": "Buchert 2000",
+      "establishes": "Buchert averaging formalism and Q_D definition (background)",
+      "status": "requires-verification"
+    }
+  ]
+}
